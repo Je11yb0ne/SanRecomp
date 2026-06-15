@@ -2286,12 +2286,10 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
         printf("[Video] CRASH in render setup (outer)! Code=0x%08X\n", GetExceptionCode()); fflush(stdout);
         return false;
     }
-    printf("[Video] Post-SEH: continuing render setup...\n"); fflush(stdout);
+    printf("[Video] Post-SEH: returning true (pipeline setup skipped for Intel GPU)\n"); fflush(stdout);
+    return true;
 
-    printf("[Video] Triple buffering setup...\n"); fflush(stdout);
-    __try {
-    uint32_t bufferCount = 2;
-
+#if 0 // DISABLED: Pipeline setup crashes on Intel D3D12
     switch (Config::TripleBuffering)
     {
     case ETripleBuffering::Auto:
@@ -2541,6 +2539,7 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
     g_commandLists[g_frame]->barriers(RenderBarrierStage::NONE, blankTextureBarriers, std::size(blankTextureBarriers));
 
     return true;
+#endif // DISABLED: Pipeline setup crashes on Intel D3D12
 }
 
 static uint32_t g_waitForGPUCount = 0;
