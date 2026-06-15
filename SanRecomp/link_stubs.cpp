@@ -36,25 +36,7 @@ bool ImGui_ImplSDL2_ProcessEvent(const SDL_Event*) { return false; }
 // ImFontAtlasSnapshot (from imgui_snapshot.cpp, disabled)
 // =============================================================================
 struct ImFontAtlas;
-ImFontAtlas* ImFontAtlasSnapshot::Load(void) { return nullptr; }
-
-// =============================================================================
-// Achievement menu stubs
-// =============================================================================
-#include <ui/achievement_menu.h>
-void AchievementMenu::Init(void) {}
-void AchievementMenu::Draw(void) {}
-
-// =============================================================================
-// Installer wizard stubs (extra methods beyond Run)
-// =============================================================================
-void InstallerWizard::Init(void) {}
-void InstallerWizard::Draw(void) {}
-
-// =============================================================================
-// ImGui utils
-// =============================================================================
-void InitImGuiUtils(void) {}
+// AchievementMenu, InstallerWizard, ImGuiUtils — now compiled from enabled source files
 
 // =============================================================================
 // Data definitions for resource variables (declared in headers but need definitions)
@@ -64,6 +46,50 @@ extern const size_t g_button_bc_diff_uncompressed_size;
 const size_t g_button_bc_diff_uncompressed_size = 1;
 extern const size_t g_im_font_atlas_texture_uncompressed_size;
 const size_t g_im_font_atlas_texture_uncompressed_size = 1;
+extern const size_t g_trophy_uncompressed_size;
+const size_t g_trophy_uncompressed_size = 1;
+extern const size_t g_im_font_atlas_uncompressed_size;
+const size_t g_im_font_atlas_uncompressed_size = 1;
+// UI image resources
+extern const size_t g_button_window_uncompressed_size;
+const size_t g_button_window_uncompressed_size = 1;
+extern const size_t g_controller_uncompressed_size;
+const size_t g_controller_uncompressed_size = 1;
+extern const size_t g_kbm_uncompressed_size;
+const size_t g_kbm_uncompressed_size = 1;
+extern const size_t g_window_uncompressed_size;
+const size_t g_window_uncompressed_size = 1;
+extern const size_t g_select_arrow_uncompressed_size;
+const size_t g_select_arrow_uncompressed_size = 1;
+extern const size_t g_main_menu1_uncompressed_size;
+const size_t g_main_menu1_uncompressed_size = 1;
+extern const size_t g_arrow_uncompressed_size;
+const size_t g_arrow_uncompressed_size = 1;
+// Installer wizard images
+extern const size_t g_install_001_uncompressed_size;
+const size_t g_install_001_uncompressed_size = 1;
+extern const size_t g_install_002_uncompressed_size;
+const size_t g_install_002_uncompressed_size = 1;
+extern const size_t g_install_003_uncompressed_size;
+const size_t g_install_003_uncompressed_size = 1;
+extern const size_t g_install_004_uncompressed_size;
+const size_t g_install_004_uncompressed_size = 1;
+extern const size_t g_install_005_uncompressed_size;
+const size_t g_install_005_uncompressed_size = 1;
+extern const size_t g_install_006_uncompressed_size;
+const size_t g_install_006_uncompressed_size = 1;
+extern const size_t g_install_007_uncompressed_size;
+const size_t g_install_007_uncompressed_size = 1;
+extern const size_t g_install_008_uncompressed_size;
+const size_t g_install_008_uncompressed_size = 1;
+extern const size_t g_libertyrecomp_uncompressed_size;
+const size_t g_libertyrecomp_uncompressed_size = 1;
+extern const size_t g_gta5_logo_uncompressed_size;
+const size_t g_gta5_logo_uncompressed_size = 1;
+extern const size_t g_tlad_logo_uncompressed_size;
+const size_t g_tlad_logo_uncompressed_size = 1;
+extern const size_t g_tbogt_logo_uncompressed_size;
+const size_t g_tbogt_logo_uncompressed_size = 1;
 extern const size_t g_spirvCacheCompressedSize;
 const size_t g_spirvCacheCompressedSize = 1;
 extern const size_t g_dxilCacheCompressedSize;
@@ -157,24 +183,45 @@ namespace Net {
 // =============================================================================
 // Disabled source file symbols
 // =============================================================================
-// Video::CreateHostDevice and Video::WaitOnSwapChain — now compiled from video.cpp
-// GameWindow::Update, GetTitle, IsFullscreen, etc. — now compiled from game_window.cpp
-bool InstallerWizard::Run(std::filesystem::path, bool) { return false; }
-float Scale(float v, bool) { return v; }
-void SetShaderModifier(unsigned int) {}
+// Video::CreateHostDevice — now compiled from video.cpp (plume)
+// GameWindow — now compiled from game_window.cpp
+// InstallerWizard — now compiled from installer_wizard.cpp
+// AchievementMenu — now compiled from achievement_menu.cpp
+// ImGuiUtils — now compiled from imgui_utils.cpp
+// ImFontAtlasSnapshot — now compiled from imgui_snapshot.cpp
+// Most UI helper functions — now compiled from enabled UI sources
 void PlayerLimitPatches::Init(void) {}
-ImFont* ImFontAtlasSnapshot::GetFont(const char*) { return nullptr; }
-void DrawTextWithShadow(const ImFont*, float, const ImVec2&, unsigned int, const char*, float, float, unsigned int) {}
-double ComputeMotion(double a, double b, double c, bool d) { (void)a; (void)b; (void)c; (void)d; return 0.0; }
-float Hermite(float a, float b, float c) { (void)a; (void)b; (void)c; return 0.0f; }
-double ComputeLinearMotion(double a, double b, double c, bool d) { (void)a; (void)b; (void)c; (void)d; return 0.0; }
-float Lerp(float a, float b, float c) { (void)a; (void)b; (void)c; return a; }
-void DrawVersionString(unsigned int) {}
-void ResetGradient(void) {}
-void SetHorizontalGradient(const ImVec2&, const ImVec2&, unsigned int, unsigned int) {}
-void SetVerticalGradient(const ImVec2&, const ImVec2&, unsigned int, unsigned int) {}
-ImFont* g_pFntNewRodin = nullptr;
-ImFont* g_pFntRodin = nullptr;
+
+// =============================================================================
+// Native File Dialog (NFD) stubs — used by installer wizard
+// =============================================================================
+extern "C" {
+void* NFD_Init(void) { return nullptr; }
+void NFD_Quit(void) {}
+int NFD_PickFolderMultipleN(void*, const char*, void*) { return 0; }
+void NFD_PathSet_Free(void*) {}
+int NFD_OpenDialogMultipleN(void*, void*, const char*, void*) { return 0; }
+const char* NFD_GetError(void) { return "NFD not available"; }
+unsigned long NFD_PathSet_GetCount(void*) { return 0; }
+void NFD_PathSet_FreePathN(void*, unsigned long) {}
+const char* NFD_PathSet_GetPathN(void*, unsigned long) { return nullptr; }
+}
+
+// =============================================================================
+// SoundTouch audio processing stubs
+// =============================================================================
+namespace soundtouch {
+class SoundTouch {
+public:
+    void setSampleRate(unsigned) {}
+    void setChannels(unsigned) {}
+    void putSamples(const float*, unsigned) {}
+    unsigned receiveSamples(float*, unsigned) { return 0; }
+};
+SoundTouch* createSoundTouchInstance() { return new SoundTouch(); }
+void destroySoundTouchInstance(SoundTouch* p) { delete p; }
+}
+
 // Xex2LoadImage now compiled from tools/XenonRecomp/XenonUtils/xex.cpp
 
 // ---- GTA V PPC function stubs ---------------------------------------------------

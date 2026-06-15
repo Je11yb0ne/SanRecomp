@@ -1,5 +1,6 @@
 #include "installer_wizard.h"
 
+#include <bc_diff.h>
 #include <nfd.h>
 
 #include <apu/embedded_player.h>

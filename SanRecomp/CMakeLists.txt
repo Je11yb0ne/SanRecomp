@@ -131,7 +131,7 @@ set(SAN_RECOMP_GPU_CXX_SOURCES
     "gpu/video.cpp"
     "gpu/imgui/imgui_common.cpp"
     # DISABLED-MSDFGEN "gpu/imgui/imgui_font_builder.cpp"
-    # TODO-FIX: "gpu/imgui/imgui_snapshot.cpp"
+    "gpu/imgui/imgui_snapshot.cpp"
 )
 
 set(SAN_RECOMP_APU_CXX_SOURCES
@@ -174,15 +174,15 @@ set(SAN_RECOMP_PATCHES_CXX_SOURCES
 )
 
 set(SAN_RECOMP_UI_CXX_SOURCES
-    # TODO-FIX-RES: "ui/achievement_menu.cpp"
+    "ui/achievement_menu.cpp"
     "ui/achievement_overlay.cpp"
     "ui/black_bar.cpp"
     "ui/button_window.cpp"
     "ui/common_menu.cpp"
     "ui/fader.cpp"
     "ui/game_window.cpp"
-    # TODO-FIX: "ui/imgui_utils.cpp"
-    # TODO-FIX-RES: "ui/installer_wizard.cpp"  # g_*_uncompressed_size
+    "ui/imgui_utils.cpp"
+    "ui/installer_wizard.cpp"
     "ui/message_window_stub.cpp"   # Stub - GTA V version needed
     "ui/network_status_overlay.cpp"
     "ui/options_menu_stub.cpp"     # Stub - GTA V version needed

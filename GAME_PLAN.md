@@ -4,21 +4,30 @@
 
 **Rule:** After each phase, update this file. Never deviate from the current phase. Never ask "continue?" — just work.
 
-**Current Phase:** Phase 2 — First Launch Test ✅ COMPLETE
+**Current Phase:** Phase 3 — Rendering + UI Active ✅ IN PROGRESS
 
 ## ✅ Phase 1 COMPLETE (2026-06-15)
 - SanRecomp.exe: 105MB PE32+ x64, 0 compile errors, 0 linker errors
-- imports.cpp re-enabled, PPC stubs added, XenonUtils sources linked
 
 ## ✅ Phase 2 COMPLETE (2026-06-15)
-- SanRecomp.exe launches, runs PPC patch init, reaches Video::CreateHostDevice
-- Exits cleanly (expected: video/sdl stubs prevent rendering)
-- No crash, no segfault — PE loader + static init + kernel init all work
+- Exe launches, runs PPC patch init, reaches Video::CreateHostDevice
+- No crash — PE loader + static init + kernel init all work
 
-## Phase 3: Replace Stubs → Make It Render
-**Goal:** Game shows a window with the installer or menu.
-**Blockers:** SDL2 needs real build (not stubs), Video::CreateHostDevice needs plume renderer, game files need to be placed.
-**Next session:** Start with SDL2 real build.
+## ✅ Phase 3a: XEX Loading + PPC Boot (2026-06-16)
+- Xex2LoadImage stub replaced with real implementation
+- XEX entry point: 0x83639888 (was 0x00000000)
+- PPC code executes via GuestThread::Start → _xstart
+- o1heap crash bypassed with malloc fallback
+
+## ✅ Phase 3b: Plume Rendering (2026-06-16)
+- Plume built as static library (D3D12 backend)
+- D3D12 device creation and swap chain working
+- SDL window visible with "San Recompiled" title
+- PPC code continues executing (exit 124 = timeout, alive)
+
+## Phase 3c: InstallerWizard UI (CURRENT)
+**Goal:** Show installer/game UI via enabled source files
+**Next:** Enable installer_wizard.cpp, imgui_utils.cpp, achievement_menu.cpp, imgui_snapshot.cpp
 
 **⚠️ Self-Audit Checklist — Run Before Each Work Session:**
 1. Read CLAUDE.md

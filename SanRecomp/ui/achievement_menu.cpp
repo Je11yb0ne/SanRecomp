@@ -1,4 +1,5 @@
 #include "achievement_menu.h"
+#include <bc_diff.h>
 #include <api/Liberty.h>
 #include <gpu/imgui/imgui_snapshot.h>
 #include <gpu/video.h>
