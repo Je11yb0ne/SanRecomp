@@ -25,9 +25,17 @@
 - SDL window visible with "San Recompiled" title
 - PPC code continues executing (exit 124 = timeout, alive)
 
-## Phase 3c: InstallerWizard UI (CURRENT)
-**Goal:** Show installer/game UI via enabled source files
-**Next:** Enable installer_wizard.cpp, imgui_utils.cpp, achievement_menu.cpp, imgui_snapshot.cpp
+## ✅ Phase 3c: InstallerWizard UI (2026-06-16)
+- 4 UI source files enabled (installer_wizard, imgui_utils, achievement_menu, imgui_snapshot)
+- 20+ resource variable stubs added
+- NFD + soundtouch stubs added
+- InstallerWizard::Run reached at runtime (exit code 3)
+- All D3D12 GPU resources created successfully
+- ⚠️ Full pipeline skipped for Intel GPU (crashes in getSampleCountsSupported/createCommandQueue)
+
+## Phase 4: Rendering Pipeline + Game Boot (NEXT)
+**Goal:** Fix D3D12 pipeline crashes on Intel, complete game boot
+**Blockers:** Intel D3D12 driver issues, PPC code hangs without output, GitHub push permission
 
 **⚠️ Self-Audit Checklist — Run Before Each Work Session:**
 1. Read CLAUDE.md
