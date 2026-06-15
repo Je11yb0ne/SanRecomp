@@ -2023,13 +2023,16 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
     ImGui::CreateContext();
     ImPlot::CreateContext();
 
+    printf("[Video] Calling GameWindow::Init...\n"); fflush(stdout);
     GameWindow::Init(sdlVideoDriver);
+    printf("[Video] GameWindow::Init done, selecting backend...\n"); fflush(stdout);
 
 #if defined(SAN_RECOMP_D3D12)
     g_backend = (DetectWine() || Config::GraphicsAPI == EGraphicsAPI::Vulkan) ? Backend::VULKAN : Backend::D3D12;
 #elif defined(SAN_RECOMP_METAL)
     g_backend = Config::GraphicsAPI == EGraphicsAPI::Vulkan ? Backend::VULKAN : Backend::METAL;
 #endif
+    printf("[Video] Backend selected: %s\n", (g_backend == Backend::D3D12) ? "D3D12" : "Vulkan"); fflush(stdout);
 
     // Attempt to create the possible backends using a vector of function pointers. Whichever succeeds first will be the chosen API.
     using RenderInterfaceFunction = std::unique_ptr<RenderInterface>(void);
@@ -2060,19 +2063,25 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
     for (size_t i = 0; i < interfaceFunctions.size(); i++)
     {
         RenderInterfaceFunction* interfaceFunction = interfaceFunctions[i];
+        printf("[Video] Trying interface #%zu (fn=%p)...\n", i, (void*)interfaceFunction); fflush(stdout);
 
 #ifdef SAN_RECOMP_D3D12
         // Wrap the device creation in __try/__except to survive from driver crashes.
         __try
 #endif
         {
+            printf("[Video] Calling interface function...\n"); fflush(stdout);
             g_interface = interfaceFunction();
+            printf("[Video] Interface function returned %p\n", (void*)g_interface.get()); fflush(stdout);
             if (g_interface == nullptr)
             {
+                printf("[Video] Interface #%zu returned null, skipping\n", i); fflush(stdout);
                 continue;
             }
 
+            printf("[Video] Interface #%zu calling createDevice...\n", i); fflush(stdout);
             g_device = g_interface->createDevice(Config::GraphicsDevice);
+            printf("[Video] Interface #%zu createDevice returned %p\n", i, (void*)g_device.get()); fflush(stdout);
             if (g_device != nullptr)
             {
                 const RenderDeviceDescription &deviceDescription = g_device->getDescription();
@@ -2148,14 +2157,33 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
 #endif
     }
 
+    printf("[Video] Loop done. g_device=%p g_interface=%p\n", (void*)g_device.get(), (void*)g_interface.get()); fflush(stdout);
+
     if (g_device == nullptr)
     {
-        // No rendering backend available (plume not built / GPU not supported).
-        // The SDL window was already created by GameWindow::Init.
-        // For now, skip the event loop and return true so the game bootstrap can proceed.
-        LOGN_WARNING("No render backend available — skipping window event loop for bootstrap.");
-        printf("[Video] No render backend. Returning true to allow PPC boot.\n"); fflush(stdout);
-        return true;
+        // No rendering backend available
+        LOGN_WARNING("No render backend available — showing window without rendering.");
+        printf("[Video] SDL window is visible. Close the window to exit.\n"); fflush(stdout);
+
+        if (GameWindow::s_pWindow)
+        {
+            SDL_Event event;
+            bool running = true;
+            while (running)
+            {
+                while (SDL_PollEvent(&event))
+                {
+                    if (event.type == SDL_QUIT)
+                    {
+                        running = false;
+                        break;
+                    }
+                }
+                SDL_Delay(16);
+            }
+        }
+
+        std::_Exit(0);
     }
 
 #ifdef SAN_RECOMP_D3D12
@@ -2166,25 +2194,48 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
     }
 #endif
 
+    printf("[Video] Calling getCapabilities...\n"); fflush(stdout);
     g_capabilities = g_device->getCapabilities();
+    printf("[Video] getCapabilities done\n"); fflush(stdout);
 
+    printf("[Video] Loading embedded resources...\n"); fflush(stdout);
     LoadEmbeddedResources();
+    printf("[Video] Embedded resources loaded\n"); fflush(stdout);
 
+    printf("[Video] Getting device description...\n"); fflush(stdout);
     constexpr uint64_t LowEndMemoryLimit = 2048ULL * 1024ULL * 1024ULL;
     RenderDeviceDescription deviceDescription = g_device->getDescription();
+    printf("[Video] Device description done: vendor=%d type=%d vram=%llu\n",
+        (int)deviceDescription.vendor, (int)deviceDescription.type, (unsigned long long)deviceDescription.dedicatedVideoMemory); fflush(stdout);
     bool lowEndType = deviceDescription.type != RenderDeviceType::UNKNOWN && deviceDescription.type != RenderDeviceType::DISCRETE;
     bool lowEndMemory = deviceDescription.dedicatedVideoMemory < LowEndMemoryLimit;
     bool lowEndUMA = deviceDescription.type == RenderDeviceType::UNKNOWN && g_capabilities.uma;
+    printf("[Video] Low-end check: type=%d mem=%d uma=%d\n", lowEndType, lowEndMemory, lowEndUMA); fflush(stdout);
     if (lowEndType || lowEndMemory || lowEndUMA)
     {
-        // Switch to low end defaults if a non-discrete GPU was detected or a low amount of VRAM was detected.
-        // Checking for UMA on D3D12 seems to be a reliable way to detect integrated GPUs.
+        printf("[Video] Applying low-end defaults...\n"); fflush(stdout);
         ApplyLowEndDefaults();
+        printf("[Video] Low-end defaults applied\n"); fflush(stdout);
     }
+    printf("[Video] Post-description: entering rendering setup...\n"); fflush(stdout);
+    printf("[Video] Getting sample counts...\n"); fflush(stdout);
 
-    const RenderSampleCounts colourSampleCount = g_device->getSampleCountsSupported(RenderFormat::R16G16B16A16_FLOAT);
-    const RenderSampleCounts depthSampleCount  = g_device->getSampleCountsSupported(RenderFormat::D32_FLOAT);
+    RenderSampleCounts colourSampleCount = RenderSampleCount::COUNT_1;
+    RenderSampleCounts depthSampleCount  = RenderSampleCount::COUNT_1;
+    __try {
+        colourSampleCount = g_device->getSampleCountsSupported(RenderFormat::R16G16B16A16_FLOAT);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        printf("[Video] getSampleCountsSupported(color) crashed!\n"); fflush(stdout);
+        colourSampleCount = RenderSampleCount::COUNT_1;
+    }
+    __try {
+        depthSampleCount  = g_device->getSampleCountsSupported(RenderFormat::D32_FLOAT);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        printf("[Video] getSampleCountsSupported(depth) crashed!\n"); fflush(stdout);
+        depthSampleCount = RenderSampleCount::COUNT_1;
+    }
     const RenderSampleCounts commonSampleCount = colourSampleCount & depthSampleCount;
+    printf("[Video] Sample counts: color=0x%x depth=0x%x\n", (unsigned)colourSampleCount, (unsigned)depthSampleCount); fflush(stdout);
 
     // Disable specific MSAA levels if they are not supported.
     if ((commonSampleCount & RenderSampleCount::COUNT_2) == 0)
@@ -2195,23 +2246,50 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
         Config::AntiAliasing.InaccessibleValues.emplace(EAntiAliasing::MSAA8x);
 
     // Set Anti-Aliasing to nearest supported level.
+    printf("[Video] Snapping AA...\n"); fflush(stdout);
     Config::AntiAliasing.SnapToNearestAccessibleValue(false);
+    printf("[Video] Creating command queue...\n"); fflush(stdout);
 
     g_queue = g_device->createCommandQueue(RenderCommandListType::DIRECT);
+    printf("[Video] Command queue created: %p\n", (void*)g_queue.get()); fflush(stdout);
 
+    printf("[Video] Creating command lists...\n"); fflush(stdout);
+    __try {
     for (auto& commandList : g_commandLists)
         commandList = g_queue->createCommandList();
+    printf("[Video] Command lists done\n"); fflush(stdout);
 
+    printf("[Video] Creating fences...\n"); fflush(stdout);
     for (auto& commandFence : g_commandFences)
         commandFence = g_device->createCommandFence();
+    printf("[Video] Fences done\n"); fflush(stdout);
 
+    printf("[Video] Creating query pools...\n"); fflush(stdout);
     for (auto& queryPool : g_queryPools)
         queryPool = g_device->createQueryPool(NUM_QUERIES);
+    printf("[Video] Query pools done\n"); fflush(stdout);
 
-    g_copyQueue = g_device->createCommandQueue(RenderCommandListType::COPY);
-    g_copyCommandList = g_copyQueue->createCommandList();
-    g_copyCommandFence = g_device->createCommandFence();
+    printf("[Video] Creating copy queue...\n"); fflush(stdout);
+    __try {
+        g_copyQueue = g_device->createCommandQueue(RenderCommandListType::COPY);
+        printf("[Video] Copy queue: %p\n", (void*)g_copyQueue.get()); fflush(stdout);
+        g_copyCommandList = g_copyQueue->createCommandList();
+        printf("[Video] Copy command list: %p\n", (void*)g_copyCommandList.get()); fflush(stdout);
+        g_copyCommandFence = g_device->createCommandFence();
+        printf("[Video] Copy fence: %p\n", (void*)g_copyCommandFence.get()); fflush(stdout);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        printf("[Video] CRASH in copy queue setup! Code=0x%08X\n", GetExceptionCode()); fflush(stdout);
+        return false;
+    }
+    printf("[Video] Copy queue done\n"); fflush(stdout);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        printf("[Video] CRASH in render setup (outer)! Code=0x%08X\n", GetExceptionCode()); fflush(stdout);
+        return false;
+    }
+    printf("[Video] Post-SEH: continuing render setup...\n"); fflush(stdout);
 
+    printf("[Video] Triple buffering setup...\n"); fflush(stdout);
+    __try {
     uint32_t bufferCount = 2;
 
     switch (Config::TripleBuffering)
@@ -2240,9 +2318,20 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
         break;
     }
 
+    printf("[Video] Creating swap chain...\n"); fflush(stdout);
     g_swapChain = g_queue->createSwapChain(RenderSwapChainDesc(GameWindow::s_renderWindow, BACKBUFFER_FORMAT, bufferCount, false, Config::MaxFrameLatency));
+    printf("[Video] Swap chain created: %p\n", (void*)g_swapChain.get()); fflush(stdout);
     g_swapChain->setVsyncEnabled(Config::VSync);
-    g_swapChainValid = !g_swapChain->needsResize();
+    printf("[Video] VSync set\n"); fflush(stdout);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        printf("[Video] CRASH in swap chain setup! Code=0x%08X\n", GetExceptionCode()); fflush(stdout);
+        return false;
+    }
+    // FIXME: Skip complex rendering setup (ImGui fonts, shaders, pipelines)
+    // to get a basic window + swap chain working on Intel GPU.
+    // TODO: Fix crashes in pipeline creation for Intel D3D12 driver.
+    printf("[Video] WARNING: Skipping pipeline/ImGui setup for testing\n"); fflush(stdout);
+    return true;
 
     for (auto& acquireSemaphore : g_acquireSemaphores)
         acquireSemaphore = g_device->createCommandSemaphore();

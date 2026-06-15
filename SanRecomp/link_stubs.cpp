@@ -23,14 +23,7 @@ size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t co
 }
 }
 
-// =============================================================================
-// Plume render interface — stubs until plume is built
-// =============================================================================
-#include <plume_render_interface.h>
-namespace plume {
-std::unique_ptr<RenderInterface> CreateD3D12Interface() { return nullptr; }
-std::unique_ptr<RenderInterface> CreateVulkanInterface() { return nullptr; }
-}
+// Plume render interface — now built from thirdparty/plume
 
 // =============================================================================
 // ImGui SDL2 backend — stubs until implot/imgui SDL2 backend is compiled

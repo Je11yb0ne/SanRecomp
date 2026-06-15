@@ -455,6 +455,7 @@ if (SAN_RECOMP_D3D12)
 
     target_link_libraries(SanRecomp PRIVATE
             dxgi
+            plume
             SanRecompLib
             CURL::libcurl
             SDL2::SDL2-static
@@ -523,6 +524,10 @@ set(SDL_STATIC ON CACHE BOOL "Build SDL2 as static library" FORCE)
 set(SDL_SHARED OFF CACHE BOOL "Don't build SDL2 shared" FORCE)
 add_subdirectory(${SAN_RECOMP_THIRDPARTY_ROOT}/SDL ${CMAKE_CURRENT_BINARY_DIR}/SDL EXCLUDE_FROM_ALL)
 # SDL_mixer stays as stubs for now — its build dependencies are complex
+
+# Build Plume rendering library (D3D12 + Vulkan backends)
+set(PLUME_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+add_subdirectory(${SAN_RECOMP_THIRDPARTY_ROOT}/plume ${CMAKE_CURRENT_BINARY_DIR}/plume EXCLUDE_FROM_ALL)
 
 target_include_directories(SanRecomp PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
