@@ -1,3 +1,6 @@
+#define XINPUT_KEYSTROKE_KEYDOWN 0x0001
+#define XINPUT_KEYSTROKE_KEYUP 0x0002
+#define XINPUT_KEYSTROKE_REPEAT 0x0004
 #include <stdafx.h>
 #include <SDL.h>
 #include <user/config.h>

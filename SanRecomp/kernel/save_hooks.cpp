@@ -27,7 +27,7 @@
 // Location: ppc_recomp.79.cpp:37654
 // Calls XamContentCreateEx to create/open save containers
 // =============================================================================
-extern "C" void __imp__sub_829A1C38(PPCContext& ctx, uint8_t* base);
+GUEST_FUNCTION_STUB(__imp__sub_829A1C38);
 PPC_FUNC(sub_829A1C38)
 {
     static int s_count = 0;
@@ -53,7 +53,7 @@ PPC_FUNC(sub_829A1C38)
 // Location: ppc_recomp.79.cpp:37723
 // Direct jump to XamContentClose
 // =============================================================================
-extern "C" void __imp__sub_829A1CA0(PPCContext& ctx, uint8_t* base);
+GUEST_FUNCTION_STUB(__imp__sub_829A1CA0);
 PPC_FUNC(sub_829A1CA0)
 {
     static int s_count = 0;
@@ -76,7 +76,7 @@ PPC_FUNC(sub_829A1CA0)
 // Location: ppc_recomp.79.cpp:37756
 // Calls XamContentCreateEnumerator to list save files
 // =============================================================================
-extern "C" void __imp__sub_829A1CB8(PPCContext& ctx, uint8_t* base);
+GUEST_FUNCTION_STUB(__imp__sub_829A1CB8);
 PPC_FUNC(sub_829A1CB8)
 {
     static int s_count = 0;
@@ -103,7 +103,7 @@ PPC_FUNC(sub_829A1CB8)
 // Location: ppc_recomp.77.cpp:7308
 // Orchestrates save operations, calls sub_829A1878
 // =============================================================================
-extern "C" void __imp__sub_8297A930(PPCContext& ctx, uint8_t* base);
+GUEST_FUNCTION_STUB(__imp__sub_8297A930);
 PPC_FUNC(sub_8297A930)
 {
     static int s_count = 0;
@@ -133,7 +133,7 @@ PPC_FUNC(sub_8297A930)
 // Location: ppc_recomp.0.cpp:7117
 // Initializes save system with 3 save slot contexts (Profile, Game, Autosave)
 // =============================================================================
-extern "C" void __imp__sub_82122CA0(PPCContext& ctx, uint8_t* base);
+GUEST_FUNCTION_STUB(__imp__sub_82122CA0);
 PPC_FUNC(sub_82122CA0)
 {
     static int s_count = 0;
@@ -158,7 +158,7 @@ PPC_FUNC(sub_82122CA0)
 // Location: ppc_recomp.0.cpp:134
 // Loads profile and enumerates/opens save files
 // =============================================================================
-extern "C" void __imp__sub_821200D0(PPCContext& ctx, uint8_t* base);
+GUEST_FUNCTION_STUB(__imp__sub_821200D0);
 extern void ShutdownAllWorkers();  // From imports.cpp - sets exit flags and signals workers
 
 // sub_821200D0 - Post-init loading / cleanup phase

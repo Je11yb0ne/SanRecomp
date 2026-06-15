@@ -1,10 +1,10 @@
-# SanRecomp - GTA IV Xbox 360 Recompilation Config
+# SanRecomp - GTA V Xbox 360 Recompilation Config
 # This is the main configuration file for XenonRecomp
 
 [main]
-file_path = "../../Grand Theft Auto IV (USA) (En,Fr,De,Es,It)/default.xex"
+file_path = "../private/default.xex"
 out_directory_path = "../ppc"
-switch_table_file_path = "./gta5_switch_tables.toml"
+switch_table_file_path = "./gta4_switch_tables.toml"
 
 # Optimizations - disabled until we have a working build
 skip_lr = false

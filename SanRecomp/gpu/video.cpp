@@ -96,28 +96,70 @@ extern void KernelPhase_EnterRuntime();
 #include "shader/msl/resolve_msaa_depth_8x.metal.metallib.h"
 #endif
 
-#include "shader/hlsl/blend_color_alpha_ps.hlsl.spirv.h"
-#include "shader/hlsl/copy_vs.hlsl.spirv.h"
-#include "shader/hlsl/copy_color_ps.hlsl.spirv.h"
-#include "shader/hlsl/copy_depth_ps.hlsl.spirv.h"
-#include "shader/hlsl/csd_filter_ps.hlsl.spirv.h"
-#include "shader/hlsl/csd_no_tex_vs.hlsl.spirv.h"
+#ifndef _WIN32 // SPIR-V disabled on Windows
+// DISABLED-SPIRV: #include "shader/hlsl/blend_color_alpha_ps.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
+// DISABLED-SPIRV: #include "shader/hlsl/copy_vs.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
+// DISABLED-SPIRV: #include "shader/hlsl/copy_color_ps.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
+// DISABLED-SPIRV: #include "shader/hlsl/copy_depth_ps.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
+// DISABLED-SPIRV: #include "shader/hlsl/csd_filter_ps.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
+// DISABLED-SPIRV: #include "shader/hlsl/csd_no_tex_vs.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/csd_vs.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/enhanced_burnout_blur_vs.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/enhanced_burnout_blur_ps.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/gamma_correction_ps.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/gaussian_blur_3x3.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/gaussian_blur_5x5.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/gaussian_blur_7x7.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/gaussian_blur_9x9.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/imgui_ps.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/imgui_vs.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/resolve_msaa_color_2x.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/resolve_msaa_color_4x.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/resolve_msaa_color_8x.hlsl.spirv.h"
-#include "shader/hlsl/resolve_msaa_depth_2x.hlsl.spirv.h"
+#endif
+// DISABLED-SPIRV: #include "shader/hlsl/resolve_msaa_depth_2x.hlsl.spirv.h"
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/resolve_msaa_depth_4x.hlsl.spirv.h"
+#endif
+#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/resolve_msaa_depth_8x.hlsl.spirv.h"
+#endif
 
 #ifdef _WIN32
 extern "C"
@@ -1610,12 +1652,17 @@ static std::unique_ptr<GuestShader> g_enhancedBurnoutBlurPSShader;
 
 #if defined(SAN_RECOMP_D3D12)
 
+#ifndef _WIN32
 #define CREATE_SHADER(NAME) \
     g_device->createShader( \
         (g_backend == Backend::VULKAN) ? g_##NAME##_spirv : g_##NAME##_dxil, \
         (g_backend == Backend::VULKAN) ? sizeof(g_##NAME##_spirv) : sizeof(g_##NAME##_dxil), \
         "shaderMain", \
         (g_backend == Backend::VULKAN) ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL)
+#else
+#define CREATE_SHADER(NAME) \
+    g_device->createShader(g_##NAME##_dxil, sizeof(g_##NAME##_dxil), "shaderMain", RenderShaderFormat::DXIL)
+#endif
 
 #elif defined(SAN_RECOMP_METAL)
 
@@ -2103,7 +2150,12 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
 
     if (g_device == nullptr)
     {
-        return false;
+        // No rendering backend available (plume not built / GPU not supported).
+        // The SDL window was already created by GameWindow::Init.
+        // For now, skip the event loop and return true so the game bootstrap can proceed.
+        LOGN_WARNING("No render backend available — skipping window event loop for bootstrap.");
+        printf("[Video] No render backend. Returning true to allow PPC boot.\n"); fflush(stdout);
+        return true;
     }
 
 #ifdef SAN_RECOMP_D3D12
@@ -2188,7 +2240,7 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
         break;
     }
 
-    g_swapChain = g_queue->createSwapChain(GameWindow::s_renderWindow, bufferCount, BACKBUFFER_FORMAT, Config::MaxFrameLatency);
+    g_swapChain = g_queue->createSwapChain(RenderSwapChainDesc(GameWindow::s_renderWindow, BACKBUFFER_FORMAT, bufferCount, false, Config::MaxFrameLatency));
     g_swapChain->setVsyncEnabled(Config::VSync);
     g_swapChainValid = !g_swapChain->needsResize();
 
@@ -2742,7 +2794,7 @@ static void HandleAchievementDebugKey()
     {
         // Unlock test achievement (cycles through IDs 1-10)
         AchievementOverlay::Open(g_debugAchievementId);
-        LOG_WARNING("[DEBUG] Achievement test: unlocked ID {}", g_debugAchievementId);
+        LOGF_DEBUG("[DEBUG] Achievement test: unlocked ID {}", g_debugAchievementId);
         g_debugAchievementId = (g_debugAchievementId % 10) + 1;
     }
 
@@ -2793,12 +2845,12 @@ static void DrawProfiler()
             {
                 ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, 20.0);
                 ImPlot::SetupAxis(ImAxis_Y1, "ms", ImPlotAxisFlags_None);
-                ImPlot::PlotLine<double>("Application", g_applicationValues, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotLineFlags_None, g_profilerValueIndex);
-                ImPlot::PlotLine<double>("GPU Frame", g_gpuFrameProfiler.values, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotLineFlags_None, g_profilerValueIndex);
-                ImPlot::PlotLine<double>("Present", g_presentProfiler.values, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotLineFlags_None, g_profilerValueIndex);
-                ImPlot::PlotLine<double>("Present Wait", g_presentWaitProfiler.values, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotLineFlags_None, g_profilerValueIndex);
-                ImPlot::PlotLine<double>("Frame Fence", g_frameFenceProfiler.values, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotLineFlags_None, g_profilerValueIndex);
-                ImPlot::PlotLine<double>("Swap Chain Acquire", g_swapChainAcquireProfiler.values, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotLineFlags_None, g_profilerValueIndex);
+                ImPlot::PlotLine<double>("Application", g_applicationValues, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotSpec(ImPlotProp_Flags, ImPlotLineFlags_None, ImPlotProp_Offset, g_profilerValueIndex));
+                ImPlot::PlotLine<double>("GPU Frame", g_gpuFrameProfiler.values, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotSpec(ImPlotProp_Flags, ImPlotLineFlags_None, ImPlotProp_Offset, g_profilerValueIndex));
+                ImPlot::PlotLine<double>("Present", g_presentProfiler.values, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotSpec(ImPlotProp_Flags, ImPlotLineFlags_None, ImPlotProp_Offset, g_profilerValueIndex));
+                ImPlot::PlotLine<double>("Present Wait", g_presentWaitProfiler.values, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotSpec(ImPlotProp_Flags, ImPlotLineFlags_None, ImPlotProp_Offset, g_profilerValueIndex));
+                ImPlot::PlotLine<double>("Frame Fence", g_frameFenceProfiler.values, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotSpec(ImPlotProp_Flags, ImPlotLineFlags_None, ImPlotProp_Offset, g_profilerValueIndex));
+                ImPlot::PlotLine<double>("Swap Chain Acquire", g_swapChainAcquireProfiler.values, PROFILER_VALUE_COUNT, 1.0, 0.0, ImPlotSpec(ImPlotProp_Flags, ImPlotLineFlags_None, ImPlotProp_Offset, g_profilerValueIndex));
                 ImPlot::EndPlot();
             }
 

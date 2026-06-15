@@ -267,9 +267,9 @@ void GameWindow::Update()
         s_isChangingDisplay = false;
 }
 
-SDL_Surface* GameWindow::GetIconSurface(void* pIconBmp, size_t iconSize)
+SDL_Surface* GameWindow::GetIconSurface(const void* pIconBmp, size_t iconSize)
 {
-    auto rw = SDL_RWFromMem(pIconBmp, iconSize);
+    auto rw = SDL_RWFromMem(const_cast<void*>(pIconBmp), static_cast<int>(iconSize));
     auto surface = SDL_LoadBMP_RW(rw, 1);
 
     if (!surface)
@@ -278,7 +278,7 @@ SDL_Surface* GameWindow::GetIconSurface(void* pIconBmp, size_t iconSize)
     return surface;
 }
 
-void GameWindow::SetIcon(void* pIconBmp, size_t iconSize)
+void GameWindow::SetIcon(const void* pIconBmp, size_t iconSize)
 {
     if (auto icon = GetIconSurface(pIconBmp, iconSize))
     {

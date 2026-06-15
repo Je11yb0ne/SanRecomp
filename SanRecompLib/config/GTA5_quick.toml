@@ -1,0 +1,29 @@
+# SanRecomp - GTA V Xbox 360 Quick Test Config
+# Minimal recompilation to validate the pipeline
+
+[main]
+file_path = "../private/default.xex"
+out_directory_path = "../ppc"
+
+# No switch table for now
+# Optimizations - disabled
+skip_lr = false
+skip_msr = false
+ctr_as_local = false
+xer_as_local = false
+reserved_as_local = false
+cr_as_local = false
+non_argument_as_local = false
+non_volatile_as_local = false
+
+# Let XenonRecomp auto-discover functions from .pdata
+skip_auto_discovery = false
+verbose = true
+progress_every = 500
+cpp_chunk_functions = 256
+disable_identical_file_check = true
+use_lightweight_analysis = true
+max_functions_in_memory = 1000
+
+# No register save/restore addresses yet (need GTA V specific values)
+# No explicit function boundaries yet

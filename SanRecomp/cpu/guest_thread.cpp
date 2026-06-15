@@ -7,8 +7,22 @@
 #include "ppc_context.h"
 #include <SDL.h>
 
+// Global PPC context pointer (current thread)
+PPCContext* g_ppcContext = nullptr;
+
+static thread_local PPCContext* tls_PPCContext = nullptr;
+
+PPCContext* GetPPCContext() {
+    return tls_PPCContext;
+}
+
+void SetPPCContext(PPCContext& ctx) {
+    tls_PPCContext = &ctx;
+    g_ppcContext = &ctx;
+}
+
 // Forward declaration from imports.cpp
-extern void PumpSdlEventsIfNeeded();
+extern void PumpSdlEventsIfNeeded();  // Defined in imports.cpp
 
 // Legacy constants for backward compatibility (now defined in guest_thread.h as X360_*)
 constexpr size_t PCR_SIZE = X360_PCR_SIZE;
@@ -20,12 +34,20 @@ constexpr size_t TEB_OFFSET = X360_TEB_OFFSET;
 
 GuestThreadContext::GuestThreadContext(uint32_t cpuNumber)
 {
+    printf("[GuestThreadContext] Allocating %zu bytes...\n", TOTAL_SIZE); fflush(stdout);
     assert(thread == nullptr);
 
     // Allocate contiguous block: [PCR][TLS][TEB][Stack]
-    // Use physical heap (0x80000000+) so stack addresses match Xbox 360 expectations
+    // Try physical heap first, fall back to malloc if physical heap fails
     thread = (uint8_t*)g_userHeap.AllocPhysical(TOTAL_SIZE, 16);
+    if (!thread) {
+        printf("[GuestThreadContext] AllocPhysical failed, using malloc fallback\n"); fflush(stdout);
+        thread = (uint8_t*)malloc(TOTAL_SIZE);
+        assert(thread);
+    }
+    printf("[GuestThreadContext] Alloc returned %p\n", (void*)thread); fflush(stdout);
     memset(thread, 0, TOTAL_SIZE);
+    printf("[GuestThreadContext] memset done\n"); fflush(stdout);
 
     // Get typed pointers to each region
     X360_PCR* pcr = reinterpret_cast<X360_PCR*>(thread);
@@ -222,12 +244,15 @@ uint32_t GuestThreadHandle::Wait(uint32_t timeout)
 uint32_t GuestThread::Start(const GuestThreadParams& params)
 {
     // Pump SDL events before starting guest code to make window responsive
+    printf("[GuestThread::Start] Step 1: PumpSdlEvents...\n"); fflush(stdout);
     PumpSdlEventsIfNeeded();
-    
+
     const auto procMask = (uint8_t)(params.flags >> 24);
     const auto cpuNumber = procMask == 0 ? 0 : 7 - std::countl_zero(procMask);
+    printf("[GuestThread::Start] Step 2: cpuNumber=%u, creating context...\n", cpuNumber); fflush(stdout);
 
     GuestThreadContext ctx(cpuNumber);
+    printf("[GuestThread::Start] Step 3: Context created\n"); fflush(stdout);
     ctx.ppcContext.r3.u64 = params.value;
     ctx.ppcContext.r4.u64 = params.value2;
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cpu/ppc_context.h>
+#include <cpu/guest_thread.h>
 #include <array>
 #include "xbox.h"
 #include "memory.h"

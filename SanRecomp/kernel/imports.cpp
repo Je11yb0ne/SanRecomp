@@ -16,7 +16,7 @@
 #include "memory.h"
 #include <memory>
 #include "xam.h"
-#include "xdm.h"
+#include <kernel/xdm.h>
 #include <hid/hid.h>
 #include <user/config.h>
 #include <user/paths.h>
@@ -231,10 +231,14 @@ bool IsMainThread()
 
 void PumpSdlEventsIfNeeded()
 {
+    static int pumpCount = 0;
+    if (++pumpCount % 100 == 1) {
+        printf("[PumpSdl] heartbeat #%d\n", pumpCount); fflush(stdout);
+    }
     // On macOS, SDL event pumping MUST happen on the main thread
     // Skip if we're on a worker thread to avoid Cocoa crashes
     if (!IsMainThread()) return;
-    
+
     auto now = std::chrono::steady_clock::now();
     if (now - g_lastSdlPumpTime >= SDL_PUMP_INTERVAL)
     {
@@ -261,6 +265,17 @@ std::unordered_map<uint32_t, uint32_t> g_handleDuplicates{};
 static std::atomic<bool> g_inStorageInit{false};
 
 namespace
+#undef STATUS_INVALID_HANDLE
+#undef STATUS_INVALID_PARAMETER
+#undef STATUS_INFO_LENGTH_MISMATCH
+#undef STATUS_END_OF_FILE
+#undef STATUS_ACCESS_DENIED
+#undef STATUS_OBJECT_NAME_NOT_FOUND
+#undef STATUS_OBJECT_PATH_NOT_FOUND
+#undef STATUS_OBJECT_NAME_INVALID
+#undef STATUS_OBJECT_NAME_COLLISION
+#undef STATUS_BUFFER_OVERFLOW
+#undef STATUS_NO_MORE_FILES
 {
     constexpr uint32_t STATUS_INVALID_HANDLE = 0xC0000008;
     constexpr uint32_t STATUS_INVALID_PARAMETER = 0xC000000D;
@@ -4056,9 +4071,9 @@ uint32_t KeSetAffinityThread(uint32_t Thread, uint32_t Affinity, be<uint32_t>* l
 void RtlLeaveCriticalSection(XRTL_CRITICAL_SECTION* cs)
 {
     // printf("RtlLeaveCriticalSection");
-    cs->RecursionCount = cs->RecursionCount.get() - 1;
+    cs->RecursionCount = cs->RecursionCount - 1;
 
-    if (cs->RecursionCount.get() != 0)
+    if (cs->RecursionCount != 0)
         return;
 
     std::atomic_ref owningThread(cs->OwningThread);
@@ -4086,7 +4101,7 @@ void RtlEnterCriticalSection(XRTL_CRITICAL_SECTION* cs)
 
         if (owningThread.compare_exchange_weak(previousOwner, thisThread) || previousOwner == thisThread)
         {
-            cs->RecursionCount = cs->RecursionCount.get() + 1;
+            cs->RecursionCount = cs->RecursionCount + 1;
             return;
         }
 
@@ -4957,7 +4972,7 @@ bool RtlTryEnterCriticalSection(XRTL_CRITICAL_SECTION* cs)
 
     if (owningThread.compare_exchange_weak(previousOwner, thisThread) || previousOwner == thisThread)
     {
-        cs->RecursionCount = cs->RecursionCount.get() + 1;
+        cs->RecursionCount = cs->RecursionCount + 1;
         return true;
     }
 
@@ -6006,10 +6021,11 @@ uint32_t XamInputGetKeystrokeEx(uint32_t userIndex, uint32_t flags, void* keystr
     if (!hid::DequeueKeystroke(userIndex, event)) {
         return ERROR_EMPTY;
     }
+        struct XINPUT_KEYSTROKE_LOCAL { be<uint16_t> VirtualKey; be<uint16_t> Unicode; be<uint16_t> Flags; uint8_t UserIndex; uint8_t HidCode; };
     
     // Write to guest memory
     if (keystroke != nullptr) {
-        XINPUT_KEYSTROKE* pKeystroke = reinterpret_cast<XINPUT_KEYSTROKE*>(keystroke);
+        XINPUT_KEYSTROKE_LOCAL* pKeystroke = reinterpret_cast<XINPUT_KEYSTROKE_LOCAL*>(keystroke);
         pKeystroke->VirtualKey = event.virtualKey;
         pKeystroke->Unicode = event.unicode;
         pKeystroke->Flags = event.flags;

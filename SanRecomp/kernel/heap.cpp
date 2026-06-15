@@ -41,40 +41,48 @@ void* Heap::Alloc(size_t size)
 
 void* Heap::AllocPhysical(size_t size, size_t alignment)
 {
+    // FIXME: o1heapAllocate on physicalHeap crashes with EXCEPTION_ACCESS_VIOLATION.
+    // The physical heap at g_memory.base + 0x80000000 (2GB mark, 2GB size) appears valid
+    // but o1heap internals fail. Temporary workaround: use malloc for physical allocations.
+    // TODO: Debug o1heap with large (>2GB) arena configurations.
     size = std::max<size_t>(1, size);
-    alignment = alignment == 0 ? 0x1000 : std::max<size_t>(16, alignment);
+    alignment = (alignment == 0) ? 0x1000 : std::max<size_t>(16, alignment);
 
     std::lock_guard lock(physicalMutex);
 
-    void* ptr = o1heapAllocate(physicalHeap, size + alignment);
-    if (ptr == nullptr)
-    {
-        const O1HeapDiagnostics diag = o1heapGetDiagnostics(physicalHeap);
-        std::fprintf(stderr,
-            "[Heap] OOM (physical): request=%zu align=%zu capacity=%zu allocated=%zu peak_allocated=%zu peak_request=%zu oom_count=%llu\n",
-            size,
-            alignment,
-            diag.capacity,
-            diag.allocated,
-            diag.peak_allocated,
-            diag.peak_request_size,
-            static_cast<unsigned long long>(diag.oom_count));
-        std::fflush(stderr);
-        return nullptr;
-    }
-    size_t aligned = ((size_t)ptr + alignment) & ~(alignment - 1);
+    // Use malloc as fallback while debugging o1heap crash
+    size_t allocSize = size + alignment + sizeof(void*) + sizeof(size_t);
+    void* rawPtr = malloc(allocSize);
+    if (!rawPtr) return nullptr;
 
-    *((void**)aligned - 1) = ptr;
-    *((size_t*)aligned - 2) = size + O1HEAP_ALIGNMENT;
+    // Calculate aligned pointer (leave room for size header before aligned ptr)
+    uintptr_t raw = (uintptr_t)rawPtr + sizeof(void*) + sizeof(size_t);
+    uintptr_t aligned = (raw + alignment - 1) & ~(alignment - 1);
+
+    // Store metadata: original pointer and allocation size
+    *((void**)(aligned - sizeof(void*))) = rawPtr;
+    *((size_t*)(aligned - sizeof(void*) - sizeof(size_t))) = size + O1HEAP_ALIGNMENT;
 
     return (void*)aligned;
 }
 
 void Heap::Free(void* ptr)
 {
-    if (ptr >= physicalHeap)
+    // FIXME: With malloc-based AllocPhysical, we can't use the o1heap physical path.
+    // Use the stored raw pointer from the allocation metadata to free.
+    if (ptr == nullptr) return;
+
+    // Try the physical heap path: if the pointer was from malloc, the metadata
+    // will have the raw pointer stored before the aligned address.
+    if (ptr >= physicalHeap || ptr < g_memory.Translate(0))
     {
         std::lock_guard lock(physicalMutex);
+        void* rawPtr = *((void**)ptr - 1);
+        if (rawPtr) {
+            free(rawPtr);
+            return;
+        }
+        // Fallback to o1heap (shouldn't happen with current code)
         o1heapFree(physicalHeap, *((void**)ptr - 1));
     }
     else

@@ -19,6 +19,12 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 project("SanRecomp-ALL")
 
+# clang-cl workaround: CMAKE_SIZEOF_VOID_P is not auto-detected by CMake
+# when using clang-cl, causing vcpkg version compatibility checks to fail.
+if(WIN32)
+    set(CMAKE_SIZEOF_VOID_P "8" CACHE STRING "Size of void pointer (x64)" FORCE)
+endif()
+
 if (APPLE)
     enable_language(OBJC OBJCXX)
 endif()

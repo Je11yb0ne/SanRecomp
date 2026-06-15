@@ -13,6 +13,12 @@
 
 #define CURRENT_THREAD_HANDLE uint32_t(-2)
 
+// PPC Context management (thread-local)
+struct PPCContext;
+PPCContext* GetPPCContext();
+void SetPPCContext(PPCContext& ctx);
+extern PPCContext* g_ppcContext;
+
 // =============================================================================
 // Xbox 360 Thread Context Structures
 // =============================================================================

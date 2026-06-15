@@ -130,8 +130,8 @@ set(SAN_RECOMP_CPU_CXX_SOURCES
 set(SAN_RECOMP_GPU_CXX_SOURCES
     "gpu/video.cpp"
     "gpu/imgui/imgui_common.cpp"
-    "gpu/imgui/imgui_font_builder.cpp"
-    "gpu/imgui/imgui_snapshot.cpp"
+    # DISABLED-MSDFGEN "gpu/imgui/imgui_font_builder.cpp"
+    # TODO-FIX: "gpu/imgui/imgui_snapshot.cpp"
 )
 
 set(SAN_RECOMP_APU_CXX_SOURCES
@@ -154,7 +154,7 @@ set(SAN_RECOMP_PATCHES_CXX_SOURCES
     "patches/gta5_input_patches.cpp"  # GTA V input remapping
     "patches/audio_patches.cpp"       # GTA V audio system (updated for RAGE)
     "patches/memcpy_patches.cpp"  # Native memcpy implementation to fix broken recompiled control flow
-    "patches/player_limit_patches.cpp"  # Extended multiplayer - raise player limit from 16 to 32+
+    # TODO-FIX-GTAV-PPC: "patches/player_limit_patches.cpp"  # Extended multiplayer - raise player limit from 16 to 32+
     
     # Generic/stub patches needed for compilation
     # "patches/aspect_ratio_patches.cpp"  # Has Sonicteam references - replaced by gta5_aspect_ratio_patches.cpp
@@ -174,21 +174,26 @@ set(SAN_RECOMP_PATCHES_CXX_SOURCES
 )
 
 set(SAN_RECOMP_UI_CXX_SOURCES
-    "ui/achievement_menu.cpp"
+    # TODO-FIX-RES: "ui/achievement_menu.cpp"
     "ui/achievement_overlay.cpp"
     "ui/black_bar.cpp"
     "ui/button_window.cpp"
     "ui/common_menu.cpp"
     "ui/fader.cpp"
     "ui/game_window.cpp"
-    "ui/imgui_utils.cpp"
-    "ui/installer_wizard.cpp"
+    # TODO-FIX: "ui/imgui_utils.cpp"
+    # TODO-FIX-RES: "ui/installer_wizard.cpp"  # g_*_uncompressed_size
     "ui/message_window_stub.cpp"   # Stub - GTA V version needed
     "ui/network_status_overlay.cpp"
     "ui/options_menu_stub.cpp"     # Stub - GTA V version needed
 )
 
 set(SAN_RECOMP_INSTALL_CXX_SOURCES
+    "link_stubs.cpp"
+    "install/installer.cpp"
+    "install/installer.cpp"
+    "link_stubs.cpp"
+    "install/installer.cpp"
     "install/installer.cpp"
     "install/iso_file_system.cpp"
     "install/iso_extractor.cpp"
@@ -200,6 +205,7 @@ set(SAN_RECOMP_INSTALL_CXX_SOURCES
     "install/xcontent_file_system.cpp"
     "install/xbox360/stfs_parser.cpp"
     "install/xbox360/xex_patcher.cpp"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/xex_patcher.cpp"
     "install/xbox360/title_update_manager.cpp"
     "install/hashes/game.cpp"
     "install/hashes/dlc_tlad.cpp"
@@ -226,7 +232,7 @@ set(SAN_RECOMP_UTILS_CXX_SOURCES
 )
 
 set(SAN_RECOMP_THIRDPARTY_SOURCES
-    "${SAN_RECOMP_THIRDPARTY_ROOT}/imgui/backends/imgui_impl_sdl2.cpp"
+    # SDL3: "${SAN_RECOMP_THIRDPARTY_ROOT}/imgui/backends/imgui_impl_sdl2.cpp"
     "${SAN_RECOMP_THIRDPARTY_ROOT}/imgui/imgui.cpp"
     "${SAN_RECOMP_THIRDPARTY_ROOT}/imgui/imgui_demo.cpp"
     "${SAN_RECOMP_THIRDPARTY_ROOT}/imgui/imgui_draw.cpp"
@@ -236,7 +242,20 @@ set(SAN_RECOMP_THIRDPARTY_SOURCES
     "${SAN_RECOMP_THIRDPARTY_ROOT}/implot/implot_demo.cpp"
     "${SAN_RECOMP_THIRDPARTY_ROOT}/implot/implot_items.cpp"
     "${SAN_RECOMP_TOOLS_ROOT}/XenosRecomp/thirdparty/smol-v/source/smolv.cpp"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/xdbf_wrapper.cpp"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/memory_mapped_file.cpp"
+    "${SAN_RECOMP_THIRDPARTY_ROOT}/o1heap/o1heap/o1heap.c"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/xxHash/xxhash.c"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/image.cpp"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/xex.cpp"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/libmspack/libmspack/mspack/lzxd.c"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/tiny-AES-c/aes.c"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenosRecomp/thirdparty/fmt/src/format.cc"
 )
+set_source_files_properties(
+    "${SAN_RECOMP_THIRDPARTY_ROOT}/o1heap/o1heap/o1heap.c"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/xxHash/xxhash.c"
+PROPERTIES LANGUAGE C)
 
 set(SAN_RECOMP_THIRDPARTY_INCLUDES
     "${SAN_RECOMP_THIRDPARTY_ROOT}/concurrentqueue"
@@ -250,9 +269,32 @@ set(SAN_RECOMP_THIRDPARTY_INCLUDES
     "${SAN_RECOMP_THIRDPARTY_ROOT}/GameNetworkingSockets/include"
     "${SAN_RECOMP_TOOLS_ROOT}/bc_diff"
     "${SAN_RECOMP_TOOLS_ROOT}/XenosRecomp/thirdparty/smol-v/source"
+	    "${SAN_RECOMP_THIRDPARTY_ROOT}/SDL/include"
+	    "${SAN_RECOMP_THIRDPARTY_ROOT}/SDL/include"
+    "${SAN_RECOMP_THIRDPARTY_ROOT}/SDL_mixer/include"
+    "${SAN_RECOMP_THIRDPARTY_ROOT}/plume"
+    "${SAN_RECOMP_THIRDPARTY_ROOT}/nativefiledialog-extended/src/include"
+    "${SAN_RECOMP_THIRDPARTY_ROOT}/msdf-atlas-gen"
+	    "${SAN_RECOMP_THIRDPARTY_ROOT}/msdf-atlas-gen/msdfgen"
+	    "${SAN_RECOMP_THIRDPARTY_ROOT}/ffmpeg-core/include"
+	    "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows-static/include"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/xxHash"
+	    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/simde"
+	    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/tomlplusplus/include"
+	    "${SAN_RECOMP_TOOLS_ROOT}/XenosRecomp/thirdparty/zstd/lib"
+	    "${SAN_RECOMP_THIRDPARTY_ROOT}/o1heap/o1heap"
+	    "${SAN_RECOMP_TOOLS_ROOT}/XenosRecomp/thirdparty/fmt/include"
 )
 
-set_source_files_properties(${SAN_RECOMP_THIRDPARTY_SOURCES} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+set_source_files_properties(${SAN_RECOMP_THIRDPARTY_SOURCES}
+    "${SAN_RECOMP_THIRDPARTY_ROOT}/o1heap/o1heap/o1heap.c"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/xxHash/xxhash.c"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/image.cpp"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/xex.cpp"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/libmspack/libmspack/mspack/lzxd.c"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/tiny-AES-c/aes.c"
+    "${SAN_RECOMP_TOOLS_ROOT}/XenosRecomp/thirdparty/fmt/src/format.cc"
+PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
 set(SAN_RECOMP_CXX_SOURCES
     "app.cpp"
@@ -391,7 +433,7 @@ if (SAN_RECOMP_FLATPAK)
     )
 endif()
 
-find_package(CURL REQUIRED)
+find_package(CURL 8 REQUIRED)
 
 if (SAN_RECOMP_METAL)
     target_compile_definitions(SanRecomp PRIVATE SAN_RECOMP_METAL)
@@ -406,15 +448,17 @@ if (SAN_RECOMP_D3D12)
     add_custom_command(TARGET SanRecomp POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PROPERTY:Microsoft::DirectX12-Core,IMPORTED_LOCATION_RELEASE> $<TARGET_FILE_DIR:SanRecomp>/D3D12
             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PROPERTY:Microsoft::DirectX12-Layers,IMPORTED_LOCATION_DEBUG> $<TARGET_FILE_DIR:SanRecomp>/D3D12
-            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PROPERTY:Microsoft::DirectXShaderCompiler,IMPORTED_LOCATION> $<TARGET_FILE_DIR:SanRecomp>
-            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PROPERTY:Microsoft::DXIL,IMPORTED_LOCATION> $<TARGET_FILE_DIR:SanRecomp>
+#             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PROPERTY:Microsoft::DirectXShaderCompiler,IMPORTED_LOCATION> $<TARGET_FILE_DIR:SanRecomp>
+#             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PROPERTY:Microsoft::DXIL,IMPORTED_LOCATION> $<TARGET_FILE_DIR:SanRecomp>
             COMMAND_EXPAND_LISTS
     )
 
     target_link_libraries(SanRecomp PRIVATE
-            Microsoft::DirectXShaderCompiler
-            Microsoft::DXIL
             dxgi
+            SanRecompLib
+            CURL::libcurl
+            SDL2::SDL2-static
+            "${SAN_RECOMP_THIRDPARTY_ROOT}/../tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/dxcompiler.lib"
     )
 endif()
 
@@ -430,24 +474,23 @@ if (WIN32)
     )
 endif()
 
-target_link_libraries(SanRecomp PRIVATE
-    fmt::fmt
-    libzstd_static
-    msdf-atlas-gen::msdf-atlas-gen
-    nfd::nfd
-    o1heap
-    XenonUtils
-    SDL2::SDL2-static
-    SDL2_mixer
-    tomlplusplus::tomlplusplus
-    SanRecompLib
-    xxHash::xxhash
-    CURL::libcurl
-    plume
-    GameNetworkingSockets::static
-)
+##DISABLEDtarget_link_libraries(SanRecomp PRIVATE
+#    fmt::fmt
+#    libzstd_static
+#    msdf-atlas-gen::msdf-atlas-gen
+#    nfd::nfd
+#    o1heap
+#    XenonUtils
+#    SDL2::SDL2-static
+#    SDL2_mixer
+#    tomlplusplus::tomlplusplus
+#    xxHash::xxhash
+#    CURL::libcurl
+#    plume
+#    GameNetworkingSockets::static
+#)
 
-target_link_libraries(SanRecomp PRIVATE ffmpeg)
+##DISABLEDtarget_link_libraries(SanRecomp PRIVATE ffmpeg)
 
 # Link abseil libraries for GameNetworkingSockets (protobuf dependency)
 if (APPLE)
@@ -475,9 +518,22 @@ if (APPLE)
     endif()
 endif()
 
+# Build SDL2 and SDL_mixer as static libraries
+set(SDL_STATIC ON CACHE BOOL "Build SDL2 as static library" FORCE)
+set(SDL_SHARED OFF CACHE BOOL "Don't build SDL2 shared" FORCE)
+add_subdirectory(${SAN_RECOMP_THIRDPARTY_ROOT}/SDL ${CMAKE_CURRENT_BINARY_DIR}/SDL EXCLUDE_FROM_ALL)
+# SDL_mixer stays as stubs for now — its build dependencies are complex
+
 target_include_directories(SanRecomp PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     "${CMAKE_CURRENT_SOURCE_DIR}/api"
+	    "${CMAKE_CURRENT_SOURCE_DIR}/kernel"
+	    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils"
+	    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/libmspack/libmspack/mspack"
+	    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/tiny-AES-c"
+	    "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/TinySHA1"
+	    "${CMAKE_CURRENT_SOURCE_DIR}/../SanRecompLib"
+            CURL::libcurl
     ${SAN_RECOMP_THIRDPARTY_INCLUDES}
 )
 
@@ -487,9 +543,14 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
     pkg_search_module(GLIB REQUIRED glib-2.0)
     pkg_search_module(GIO REQUIRED gio-2.0)
     target_include_directories(SanRecomp PRIVATE ${X11_INCLUDE_DIR} ${GLIB_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS})
+    target_include_directories(SanRecomp PRIVATE ${X11_INCLUDE_DIR} ${GLIB_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS})
     target_link_libraries(SanRecomp PRIVATE ${X11_LIBRARIES} ${GLIB_LIBRARIES} ${GIO_LIBRARIES})
 endif()
 
+find_program(DIRECTX_DXC_TOOL dxc PATHS "C:/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64")
+if(NOT DIRECTX_DXC_TOOL)
+    message(WARNING "DXC not found - shader compilation disabled")
+endif()
 target_precompile_headers(SanRecomp PUBLIC ${SAN_RECOMP_PRECOMPILED_HEADERS})
 
 function(compile_shader FILE_PATH TARGET_NAME)
@@ -518,12 +579,15 @@ function(compile_shader FILE_PATH TARGET_NAME)
         )
         target_sources(SanRecomp PRIVATE ${HLSL_FILE_PATH}.dxil.h)
     endif()
-    add_custom_command(
-        OUTPUT ${HLSL_FILE_PATH}.spirv.h
-        COMMAND ${DIRECTX_DXC_TOOL} -T ${TARGET_NAME} -HV 2021 -all-resources-bound -spirv -fvk-use-dx-layout ${ARGN} -E shaderMain -Fh ${HLSL_FILE_PATH}.spirv.h ${HLSL_FILE_PATH} -Vn g_${HLSL_NAME}_spirv
-        DEPENDS ${HLSL_FILE_PATH}
-    )
-    target_sources(SanRecomp PRIVATE ${HLSL_FILE_PATH}.spirv.h)
+#	    # SPIR-V disabled on Windows (SDK DXC lacks SPIR-V backend)
+#	    if(NOT WIN32)
+#    add_custom_command(
+#        OUTPUT ${HLSL_FILE_PATH}.spirv.h
+#        COMMAND ${DIRECTX_DXC_TOOL} -T ${TARGET_NAME} -HV 2021 -all-resources-bound -spirv -fvk-use-dx-layout ${ARGN} -E shaderMain -Fh ${HLSL_FILE_PATH}.spirv.h ${HLSL_FILE_PATH} -Vn g_${HLSL_NAME}_spirv
+#        DEPENDS ${HLSL_FILE_PATH}
+#    )
+#	    endif()
+#    target_sources(SanRecomp PRIVATE ${HLSL_FILE_PATH}.spirv.h)
 endfunction()
 
 function(compile_vertex_shader FILE_PATH)
@@ -630,3 +694,5 @@ BIN2C(TARGET_OBJ SanRecomp SOURCE_FILE "${RESOURCES_SOURCE_PATH}/sounds/cursor2.
 BIN2C(TARGET_OBJ SanRecomp SOURCE_FILE "${RESOURCES_SOURCE_PATH}/sounds/deside.ogg" DEST_FILE "${RESOURCES_OUTPUT_PATH}/sounds/deside.ogg" ARRAY_NAME "g_deside")
 BIN2C(TARGET_OBJ SanRecomp SOURCE_FILE "${RESOURCES_SOURCE_PATH}/sounds/move.ogg" DEST_FILE "${RESOURCES_OUTPUT_PATH}/sounds/move.ogg" ARRAY_NAME "g_move")
 BIN2C(TARGET_OBJ SanRecomp SOURCE_FILE "${RESOURCES_SOURCE_PATH}/sounds/main_deside.ogg" DEST_FILE "${RESOURCES_OUTPUT_PATH}/sounds/main_deside.ogg" ARRAY_NAME "g_main_deside")
+
+# SDL2 core symbols (minimal static link)

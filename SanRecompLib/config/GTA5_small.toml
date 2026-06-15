@@ -1,9 +1,9 @@
-# SanRecomp - GTA IV Xbox 360 Recompilation Config (SMALL TEST)
+# SanRecomp - GTA V Xbox 360 Recompilation Config (SMALL TEST)
 # This is a minimal config for quick pipeline validation.
 # Only recompiles register save/restore helper functions (~100 functions).
 
 [main]
-file_path = "../../Grand Theft Auto IV (USA) (En,Fr,De,Es,It)/default.xex"
+file_path = "../private/default.xex"
 out_directory_path = "../ppc"
 # No switch table file - we're not auto-discovering functions
 # switch_table_file_path = "./gta5_switch_tables.toml"
@@ -32,7 +32,7 @@ savevmx_64_address = 0x82990394
 # Debug/scaling options - configured for quick test
 verbose = true
 progress_every = 10
-skip_auto_discovery = true          # IMPORTANT: Skip .pdata and branch scanning
+skip_auto_discovery = false          # Use .pdata function discovery (no GTA V save/restore addrs yet)
 cpp_chunk_functions = 100           # Small chunks for fast testing
 disable_identical_file_check = true # Skip file comparison to save RAM
 

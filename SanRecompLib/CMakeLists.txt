@@ -10,9 +10,9 @@ else()
     add_compile_options(-ffp-model=strict)
 endif()
 
-target_compile_definitions(XenonRecomp PRIVATE 
-    XENON_RECOMP_CONFIG_FILE_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/config/GTA5.toml\"
-    XENON_RECOMP_HEADER_FILE_PATH=\"${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/ppc_context.h\")
+# target_compile_definitions(XenonRecomp PRIVATE 
+#    XENON_RECOMP_CONFIG_FILE_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/config/GTA5.toml\"
+#    XENON_RECOMP_HEADER_FILE_PATH=\"${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/ppc_context.h\")
 
 set(SAN_RECOMP_PPC_RECOMPILED_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_config.h"
@@ -60,12 +60,12 @@ endforeach()
 set(XENOS_RECOMP_ROOT "${SAN_RECOMP_TOOLS_ROOT}/XenosRecomp/XenosRecomp")
 set(XENOS_RECOMP_INCLUDE "${XENOS_RECOMP_ROOT}/shader_common.h")
 
-target_compile_definitions(XenosRecomp PRIVATE 
-    XENOS_RECOMP_INPUT=\"${CMAKE_CURRENT_SOURCE_DIR}/private/shader\" 
-    XENOS_RECOMP_OUTPUT=\"${CMAKE_CURRENT_SOURCE_DIR}/shader/shader_cache.cpp\"
-    XENOS_RECOMP_INCLUDE_INPUT=\"${XENOS_RECOMP_INCLUDE}\"
-    SAN_RECOMP
-)
+# target_compile_definitions(XenosRecomp PRIVATE 
+#    XENOS_RECOMP_INPUT=\"${CMAKE_CURRENT_SOURCE_DIR}/private/shader\" 
+#    XENOS_RECOMP_OUTPUT=\"${CMAKE_CURRENT_SOURCE_DIR}/shader/shader_cache.cpp\"
+#    XENOS_RECOMP_INCLUDE_INPUT=\"${XENOS_RECOMP_INCLUDE}\"
+#    SAN_RECOMP
+#)
 
 file(GLOB XENOS_RECOMP_SOURCES 
     "${XENOS_RECOMP_ROOT}/*.h"
@@ -86,6 +86,7 @@ file(GLOB XENOS_RECOMP_SOURCES
 #         ${XENOS_RECOMP_INCLUDE}
 #     USES_TERMINAL
 # )
+message(STATUS "SanRecompLib sources count: ${SAN_RECOMP_PPC_RECOMPILED_SOURCES}")
 
 add_library(SanRecompLib
     ${SAN_RECOMP_PPC_RECOMPILED_SOURCES}

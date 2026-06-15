@@ -1,5 +1,6 @@
 #pragma once
 
+#include <xbox.h>
 #include "heap.h"
 #include "memory.h"
 

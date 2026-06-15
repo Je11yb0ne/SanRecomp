@@ -37,12 +37,13 @@
 // Additional declarations can be added when we implement direct replacement.
 
 // Main initialization functions (currently called directly)
-extern "C" void __imp__sub_8218C600(PPCContext& ctx, uint8_t* base);  // Core engine init
-extern "C" void __imp__sub_82120EE8(PPCContext& ctx, uint8_t* base);  // Game manager init
-extern "C" void __imp__sub_821250B0(PPCContext& ctx, uint8_t* base);  // Memory pool alloc
-extern "C" void __imp__sub_82318F60(PPCContext& ctx, uint8_t* base);  // String table lookup
-extern "C" void __imp__sub_82124080(PPCContext& ctx, uint8_t* base);  // Profile/save init
-extern "C" void __imp__sub_82120FB8(PPCContext& ctx, uint8_t* base);  // Subsystem init (63)
+// GTA V PPC stubs — TODO: replace with actual GTA V addresses from IDA
+extern "C" void __imp__sub_8218C600(PPCContext&, uint8_t*) {}
+extern "C" void __imp__sub_82120EE8(PPCContext&, uint8_t*) {}
+extern "C" void __imp__sub_821250B0(PPCContext&, uint8_t*) {}
+extern "C" void __imp__sub_82318F60(PPCContext&, uint8_t*) {}
+extern "C" void __imp__sub_82124080(PPCContext&, uint8_t*) {}
+extern "C" void __imp__sub_82120FB8(PPCContext&, uint8_t*) {}
 
 // =============================================================================
 // Helper Macros

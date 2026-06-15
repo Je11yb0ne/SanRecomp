@@ -28,8 +28,8 @@ public:
     static inline bool s_isFullscreenCursorVisible;
     static inline bool s_isChangingDisplay;
 
-    static SDL_Surface* GetIconSurface(void* pIconBmp, size_t iconSize);
-    static void SetIcon(void* pIconBmp, size_t iconSize);
+    static SDL_Surface* GetIconSurface(const void* pIconBmp, size_t iconSize);
+    static void SetIcon(const void* pIconBmp, size_t iconSize);
     static void SetIcon(EPlayerCharacter player = EPlayerCharacter::Sonic);
     static const char* GetTitle();
     static void SetTitle(const char* title = nullptr);

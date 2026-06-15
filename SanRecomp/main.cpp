@@ -217,10 +217,21 @@ uint32_t LdrLoadModule(const std::filesystem::path &path)
         return 0;
     }
 
+    printf("[LdrLoadModule] Step 1: Calling Image::ParseImage...\n"); fflush(stdout);
     const auto image = Image::ParseImage(loadResult.data(), loadResult.size());
+    printf("[LdrLoadModule] Step 2: ParseImage returned, entry=0x%08X size=%zu\n", image.entry_point, image.size); fflush(stdout);
 
+    printf("[LdrLoadModule] Step 3: memcpy to 0x%08X, %zu bytes...\n", (unsigned)image.base, image.size); fflush(stdout);
+    // Check destination address
+    {
+        void* dst = g_memory.Translate(image.base);
+        uint8_t* dstEnd = (uint8_t*)dst + image.size;
+        printf("[LdrLoadModule] Step 3a: dst=%p, dstEnd=%p\n", dst, (void*)dstEnd); fflush(stdout);
+    }
     memcpy(g_memory.Translate(image.base), image.data.get(), image.size);
+    printf("[LdrLoadModule] Step 4: memcpy done\n"); fflush(stdout);
     g_xdbfWrapper = XDBFWrapper(static_cast<uint8_t*>(g_memory.Translate(image.resource_offset)), image.resource_size);
+    printf("[LdrLoadModule] Step 5: XDBFWrapper created\n"); fflush(stdout);
 
     // GTA V Memory Layout Collision Fix
     // Address 0x82003890 aliases with "common.rpf" string in image .rdata section.

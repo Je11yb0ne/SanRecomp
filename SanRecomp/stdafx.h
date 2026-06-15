@@ -1,8 +1,10 @@
 #pragma once
 
 #define NOMINMAX
+#define _USE_MATH_DEFINES
 
 #if defined(_WIN32)
+#include <winsock2.h>
 #include <windows.h>
 #include <ShlObj_core.h>
 #include <wrl/client.h>

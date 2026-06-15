@@ -207,9 +207,9 @@ void AudioConfigChanged()
 // These hooks intercept the actual PPC audio initialization functions
 // to track when the audio system is ready for volume control.
 
-// External declarations for original PPC functions
-extern "C" void __imp__sub_822EEDB8(PPCContext& ctx, uint8_t* base);
-extern "C" void __imp__sub_821AB5F8(PPCContext& ctx, uint8_t* base);
+// External declarations for original PPC functions (stubs until GTA V addresses found)
+extern "C" void __imp__sub_822EEDB8(PPCContext&, uint8_t*) {}
+extern "C" void __imp__sub_821AB5F8(PPCContext&, uint8_t*) {}
 
 // Hook for audio system initialization (sub_822EEDB8)
 // Called during game startup to initialize RAGE audEngine
