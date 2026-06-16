@@ -1,1 +1,6 @@
 ppc_*
+!ppc_context.h
+!ppc_config.h
+!ppc_func_mapping.cpp
+!ppc_recomp_shared.h
+!ppc_indirect.cpp
