@@ -84,7 +84,16 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 - ⚠️ VBlank 回调中 interruptUserData=0，导致 sub_822D41E8 的 r31=0，函数无法正常工作
 - ⚠️ 游戏未完成初始化，无法注册真实的 VdSetGraphicsInterruptCallback
 - ✅ 添加 init loop breakers + sub_83639628 覆盖（返回 0 跳过 XamLoaderTerminateTitle）
-- 🔧 下一步：打破 0x838871A4 忙等 → 游戏完成初始化 → 注册真实回调 → GPU 命令翻译
+- ✅ 忙等破解器值轮转：0x10→0x00→0xFF→… 推动游戏状态机前进
+- ✅ **游戏初始化完成！_xstart 成功返回**（用 0x00 破解忙等后）
+- ✅ SDL 事件循环保持窗口存活（main.cpp）
+- ✅ VBlank 从事件循环启动（而非 guest_thread），60Hz 持续运行
+- ✅ sub_822D41E8 覆盖为 no-op 防止 VBlank 线程挂起
+- ✅ VBlank PCR 在 0x82001000 初始化（有效 PCR 结构）
+- ✅ VdGetSystemCommandBuffer 返回有效 ring buffer (0x84000000)
+- ⚠️ VdSwap→Video::Present 在 3 帧后阻塞（交换链饥饿 — 无 BeginCommandList 周期）
+- ⚠️ 不调用 VdSwap 时 VBlank 线程无限运行（60Hz 心跳正常）
+- 🔧 下一步：实现 BeginCommandList→clear→ExecuteCommandList 周期，修复交换链饥饿
 
 ### 2026-06-16 (Session — Vulkan 迁移 + 渲染循环)
 - ✅ 研究 refs/ 所有项目渲染后端
