@@ -91,9 +91,11 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 - ✅ sub_822D41E8 覆盖为 no-op 防止 VBlank 线程挂起
 - ✅ VBlank PCR 在 0x82001000 初始化（有效 PCR 结构）
 - ✅ VdGetSystemCommandBuffer 返回有效 ring buffer (0x84000000)
-- ⚠️ VdSwap→Video::Present 在 3 帧后阻塞（交换链饥饿 — 无 BeginCommandList 周期）
-- ⚠️ 不调用 VdSwap 时 VBlank 线程无限运行（60Hz 心跳正常）
-- 🔧 下一步：实现 BeginCommandList→clear→ExecuteCommandList 周期，修复交换链饥饿
+- ✅ **连续帧呈现：60Hz PrepareFrameAndPresent 循环正常工作**
+- ✅ PrepareFrameAndPresent()：acquire→clear→barriers→execute→present 完整周期
+- ✅ 帧 #1-#5, #60, #120, #180, #240, #300+ 全部成功呈现
+- ✅ VBlank 线程不间断运行，无阻塞无崩溃
+- 🔧 下一步：将游戏渲染内容（PM4 命令/游戏绘制）注入帧管线
 
 ### 2026-06-16 (Session — Vulkan 迁移 + 渲染循环)
 - ✅ 研究 refs/ 所有项目渲染后端
