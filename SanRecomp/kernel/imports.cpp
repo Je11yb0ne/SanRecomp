@@ -4377,12 +4377,17 @@ bool VdPersistDisplay(uint32_t a1, uint32_t* a2)
     return false;
 }
 
+extern "C" void _VideoPresent();
+
 void VdSwap()
 {
-    // MarathonRecomp-style: VdSwap is a stub
-    // Frame presentation is handled by Video::Present() hooked to game's D3D Present
-    // Phase transition and FPS limiting happen in Video::Present()
-    LOG_UTILITY("!!! STUB !!!");
+    static int frame = 0;
+    frame++;
+    if (frame <= 5 || frame % 60 == 0) {
+        printf("[VdSwap] Frame #%d — presenting\n", frame);
+        fflush(stdout);
+    }
+    _VideoPresent();
 }
 
 void VdGetSystemCommandBuffer()
