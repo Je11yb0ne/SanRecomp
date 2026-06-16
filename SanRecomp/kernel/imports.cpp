@@ -4193,6 +4193,12 @@ uint32_t KeGetCurrentProcessType()
 
 
 
+
+// Strong override for sub_8255DC78 — crashes via sub_8255DC48 chain.
+void sub_8255DC78(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_8255DC78 #%d (r3=%lld r4=%lld)\n",n,(long long)ctx.r3.u64,(long long)ctx.r4.u64);
+    ctx.r3.u64 = ctx.r3.u32 > ctx.r4.u32 ? ctx.r3.u64 : ctx.r4.u64;
+}
 // Strong override for sub_831955A8 — crashes inside due to null PCR.
 void sub_831955A8(PPCContext& __restrict ctx, uint8_t* base) {
     static int n=0; if(++n<=3) printf("[PATCH] sub_831955A8 #%d broken\n",n);
