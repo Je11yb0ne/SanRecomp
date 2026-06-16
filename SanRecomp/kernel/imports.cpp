@@ -4743,6 +4743,28 @@ void FireVBlankCallback() {
             ctx.r1.u64 = 0x10000000; ctx.r13.u64 = 0x82001000;
             ctx.r3.u32 = g_gpuRingBuffer.interruptUserData;
             ctx.r4.u32 = 0;
+
+            // On first fire, trigger graphics initialization chain
+            // sub_82989588 → sub_83225C90 → sub_83225428 → sub_836B0408 → sub_836BA680 → register callback
+            if (fireCount == 1) {
+                printf("[VBlank] First fire — triggering graphics init chain via sub_82989588\n");
+                fflush(stdout);
+                auto* gfxInit = g_memory.FindFunction(0x82989588);
+                if (gfxInit) {
+                    __try {
+                        gfxInit(ctx, g_memory.base);
+                        printf("[VBlank] Graphics init chain completed\n");
+                        fflush(stdout);
+                    } __except(EXCEPTION_EXECUTE_HANDLER) {
+                        printf("[VBlank] Graphics init CRASHED! Code=0x%08X\n", GetExceptionCode());
+                        fflush(stdout);
+                    }
+                } else {
+                    printf("[VBlank] sub_82989588 NOT FOUND\n");
+                    fflush(stdout);
+                }
+            }
+
             __try {
                 cb(ctx, g_memory.base);
             } __except(EXCEPTION_EXECUTE_HANDLER) {
@@ -4823,13 +4845,17 @@ static void InitVBlankPCR() {
     fflush(stdout);
 
     // Initialize graphics state at 0x83830000 (userData for VBlank callback)
-    // Size: 64KB filled with self-referential pointers to prevent null deref
+    // Size: 256KB filled with self-referential pointers to prevent null deref
+    // Also initialize the surrounding regions for any cascading dereferences
     uint32_t gfxBase = 0x83830000;
-    for (uint32_t off = 0; off < 0x10000; off += 4) {
-        // Fill with self-pointer: each dword points to itself (valid non-null)
+    for (uint32_t off = 0; off < 0x40000; off += 4) {
         PPC_STORE_U32(gfxBase + off, gfxBase + off);
     }
-    printf("[VBlank] Graphics state initialized at 0x%08X (64KB self-refs)\n", gfxBase);
+    // Also fill 0x83800000-0x83830000 with self-refs (may be needed by related structures)
+    for (uint32_t off = 0; off < 0x30000; off += 4) {
+        PPC_STORE_U32(0x83800000 + off, 0x83800000 + off);
+    }
+    printf("[VBlank] Graphics state initialized: 0x83800000-0x83870000 (448KB self-refs)\n");
     fflush(stdout);
 }
 
