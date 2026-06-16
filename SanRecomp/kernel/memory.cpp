@@ -52,6 +52,9 @@ Memory::Memory()
         *(volatile uint32_t*)(base + 0x10) = __builtin_bswap32(0x10);
         *(volatile uint32_t*)(base + 0x14) = __builtin_bswap32(0x10);
         *(volatile uint16_t*)(base + 0x08) = __builtin_bswap16(0xFFFF);
+        // Prevent _xstart shutdown: *(0x83EC0850) must be non-zero.
+        // If zero, game takes DbgPrint → XamLoaderTerminateTitle path.
+        *(volatile uint32_t*)(base + 0x83EC0850ull) = __builtin_bswap32(1);
     }
 
     for (size_t i = 0; PPCFuncMappings[i].guest != 0; i++)
