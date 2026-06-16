@@ -4744,27 +4744,6 @@ void FireVBlankCallback() {
             ctx.r3.u32 = g_gpuRingBuffer.interruptUserData;
             ctx.r4.u32 = 0;
 
-            // On first fire, trigger graphics initialization chain
-            // sub_82989588 → sub_83225C90 → sub_83225428 → sub_836B0408 → sub_836BA680 → register callback
-            if (fireCount == 1) {
-                printf("[VBlank] First fire — triggering graphics init chain via sub_82989588\n");
-                fflush(stdout);
-                auto* gfxInit = g_memory.FindFunction(0x82989588);
-                if (gfxInit) {
-                    __try {
-                        gfxInit(ctx, g_memory.base);
-                        printf("[VBlank] Graphics init chain completed\n");
-                        fflush(stdout);
-                    } __except(EXCEPTION_EXECUTE_HANDLER) {
-                        printf("[VBlank] Graphics init CRASHED! Code=0x%08X\n", GetExceptionCode());
-                        fflush(stdout);
-                    }
-                } else {
-                    printf("[VBlank] sub_82989588 NOT FOUND\n");
-                    fflush(stdout);
-                }
-            }
-
             __try {
                 cb(ctx, g_memory.base);
             } __except(EXCEPTION_EXECUTE_HANDLER) {
@@ -8390,42 +8369,15 @@ void sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base) {
     }
 }
 
-// Diagnostic override: sub_836BA050 (register VBlank callback with r3=graphicsState)
-void sub_836BA050(PPCContext& __restrict ctx, uint8_t* base) {
-    // r3 = some graphics state pointer (userData for the callback)
-    // r10+5992 at 0x822E1768 should contain the callback address
-    uint32_t cbAddr = __builtin_bswap32(*(uint32_t*)(base + 0x822E1768));
-    printf("[sub_836BA050] Called! r3(userData)=0x%08X cbPtr@0x822E1768=0x%08X\n",
-        ctx.r3.u32, cbAddr);
-    fflush(stdout);
-    // Register the callback using the value from memory
-    if (cbAddr != 0 && cbAddr != 0xFFFFFFFF) {
-        extern void VdSetGraphicsInterruptCallback(uint32_t, uint32_t);
-        VdSetGraphicsInterruptCallback(cbAddr, ctx.r3.u32);
-    }
-}
-// Override sub_836BA680 to call sub_836BA050 (ensure render callback is registered)
-void sub_836BA680(PPCContext& __restrict ctx, uint8_t* base) {
-    static int n=0; if(++n<=3) printf("[PATCH] sub_836BA680 #%d — manually registering render callback\n",n);
-    fflush(stdout);
-    // Call sub_836BA050 with a dummy r3 (graphics state pointer = 0x83830000)
-    ctx.r3.u64 = 0x83830000;
-    sub_836BA050(ctx, base);
-}
+// Diagnostic overrides REMOVED — let game init run naturally.
+// The busy-wait breaker handles spinloops. Thread creation + graphics init
+// (sub_836B0408 → sub_836BA680 → sub_836BA050 → VdSetGraphicsInterruptCallback)
+// should now execute properly during _xstart.
 
-// Init loop breakers — skip functions that loop forever on uninitialized data
-void sub_83626A3C(PPCContext& __restrict ctx, uint8_t* base) {
-    static int n=0; if(++n<=3) printf("[PATCH] sub_83626A3C #%d\n",n);
-}
-void sub_83627808(PPCContext& __restrict ctx, uint8_t* base) {
-    static int n=0; if(++n<=3) printf("[PATCH] sub_83627808 #%d\n",n);
-}
-void sub_836267B0(PPCContext& __restrict ctx, uint8_t* base) {
-    static int n=0; if(++n<=3) printf("[PATCH] sub_836267B0 #%d\n",n);
-}
-// Override sub_83639628 to return 0 — prevents XamLoaderTerminateTitle
-// (_xstart calls this; if r3==0, skips terminate; if r3!=0, calls terminate)
-void sub_83639628(PPCContext& __restrict ctx, uint8_t* base) {
-    static int n=0; if(++n<=3) printf("[PATCH] sub_83639628 #%d returning 0 (skip terminate)\n",n);
-    ctx.r3.s64 = 0;
-}
+// Init loop breakers REMOVED — let game init run naturally.
+// The busy-wait breaker (ppc_context.h) handles spinloops by rotating values.
+// Thread creation and graphics init should now execute properly.
+// sub_83639628 — let the original run (returns value used by _xstart)
+// Previously overridden to return 0 (skip terminate). Now we let it run
+// naturally so the game can properly complete init.
+// The busy-wait breaker handles any spinloops encountered.
