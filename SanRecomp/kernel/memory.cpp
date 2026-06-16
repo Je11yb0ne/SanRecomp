@@ -1,6 +1,9 @@
 #include <stdafx.h>
 #include "memory.h"
 
+// Forward declarations for function table patches
+extern "C" void sub_823F4D38_patch(PPCContext&, uint8_t*);
+
 static constexpr size_t AlignDown(size_t value, size_t alignment) noexcept
 {
     return value & ~(alignment - 1);
@@ -54,6 +57,10 @@ Memory::Memory()
         if (PPCFuncMappings[i].host != nullptr)
             InsertFunction(PPCFuncMappings[i].guest, PPCFuncMappings[i].host);
     }
+
+    // Patch dispatch table for functions called via PPC_CALL_INDIRECT_FUNC.
+    // Weak alias overrides in imports.cpp don't catch indirect calls.
+    InsertFunction(0x823F4D38, (PPCFunc*)sub_823F4D38_patch);
 
     // Protect the function lookup table as read-only to prevent
     // game writes from corrupting host function pointers.
