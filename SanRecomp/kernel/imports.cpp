@@ -4826,12 +4826,18 @@ static void InitVBlankPCR() {
     printf("[VBlank] PCR initialized at 0x%08X\n", pcrBase);
     fflush(stdout);
 
-    // Ensure PPC memory for graphics state is committed + zero-initialized
+    // Ensure PPC memory for graphics state is committed + initialized
     uint32_t gfxBase = 0x83800000;
     size_t gfxSize = 0x800000; // 8MB
     VirtualAlloc(g_memory.base + gfxBase, gfxSize, MEM_COMMIT, PAGE_READWRITE);
     memset(g_memory.base + gfxBase, 0, gfxSize);
-    printf("[VBlank] Graphics state: 0x%08X-0x%08X (8MB zeros)\n",
+
+    // Set D3D device flag: offset 13992 (0x36A8), bit 27 (0x08000000)
+    // This flag controls whether rendering is active. Without it, the render
+    // callback skips all drawing (null checks pass = device not initialized).
+    PPC_STORE_U32(gfxBase + 13992, 0x08000000);
+
+    printf("[VBlank] Graphics state: 0x%08X-0x%08X (8MB, D3D flag set)\n",
         gfxBase, gfxBase + (uint32_t)gfxSize);
     fflush(stdout);
 
@@ -8374,10 +8380,12 @@ extern "C" void __imp__sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base);
 void sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base) {
     static int n = 0;
     n++;
-    // Re-zero the graphics state (undo modifications from previous frame)
-    // Only clear known offsets that the callback writes to (48, 16968, 23760, etc.)
+    // Re-zero specific fields modified by the callback (undo frame state)
+    // Preserve the D3D device flag at offset 13992 (0x36A8)
     uint32_t gfxBase = 0x83800000;
-    memset(base + gfxBase, 0, 0x10000); // 64KB is enough for all known offsets
+    // Clear the main state area but skip the flag region (0x3600-0x3700)
+    memset(base + gfxBase + 64, 0, 0x3600 - 64);      // Before flag
+    memset(base + gfxBase + 0x3700, 0, 0x10000 - 0x3700); // After flag
     if (n <= 3 || n % 60 == 0) {
         printf("[CALLBACK] sub_822D41E8 #%d r3=0x%08llX (with re-zero)\n", n, (unsigned long long)ctx.r3.u64);
         fflush(stdout);
