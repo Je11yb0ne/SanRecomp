@@ -4192,6 +4192,11 @@ uint32_t KeGetCurrentProcessType()
 
 
 
+
+// Strong override for sub_831955A8 — crashes inside due to null PCR.
+void sub_831955A8(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_831955A8 #%d broken\n",n);
+}
 // Strong override for sub_823F4D70 — TLS slot writer with null guard.
 void sub_823F4D70(PPCContext& __restrict ctx, uint8_t* base) {
     uint32_t pcr_field336 = PPC_LOAD_U32(ctx.r13.u32 + 336);

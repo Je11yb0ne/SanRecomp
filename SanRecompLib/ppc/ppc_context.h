@@ -164,12 +164,9 @@ static inline uint32_t _ppc_busywait_load32(uint8_t* base, uint32_t addr) {
 #define PPC_LOOKUP_FUNC(x, y) *(PPCFunc**)(x + PPC_IMAGE_BASE + PPC_IMAGE_SIZE + (uint64_t(uint32_t(y) - PPC_CODE_BASE) * 2))
 
 #ifndef PPC_CALL_INDIRECT_FUNC
-// Guard against uninitialized/corrupted function pointers.
-#define _PPC_VALID_FN(fn, addr) \
-    (((addr) >= PPC_CODE_BASE && (addr) < (PPC_CODE_BASE + PPC_CODE_SIZE)) \
-     && (uintptr_t)(fn) != 0 && (uintptr_t)(fn) != 0xFFFFFFFFFFFFFFFFull)
+// Guard against corrupted function pointers (game writes to fn table).
 #define PPC_CALL_INDIRECT_FUNC(x) \
-    (_PPC_VALID_FN(PPC_LOOKUP_FUNC(base, x), x) \
+    ((PPC_LOOKUP_FUNC(base, x) && (uintptr_t)PPC_LOOKUP_FUNC(base, x) != 0xFFFFFFFFFFFFFFFFull) \
         ? (PPC_LOOKUP_FUNC(base, x))(ctx, base) \
         : (printf("[INDIRECT-CALL] Skipping invalid fn addr=0x%08X\n", (uint32_t)(x)), fflush(stdout), (void)0))
 #endif
