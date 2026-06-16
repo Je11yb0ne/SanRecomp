@@ -4710,16 +4710,41 @@ uint32_t g_vblank_pcr = 0;
 uint32_t g_vblank_stack = 0;
 
 void FireVBlankCallback() {
+    static int fireCount = 0;
+    fireCount++;
     if (g_gpuRingBuffer.interruptCallback != 0) {
         auto* cb = g_memory.FindFunction(g_gpuRingBuffer.interruptCallback);
         if (cb) {
+            if (fireCount <= 5 || fireCount % 60 == 0) {
+                printf("[VBlank-Fire] #%d cb=0x%08X r13=0x%08X r1=0x%08X\n",
+                    fireCount, g_gpuRingBuffer.interruptCallback,
+                    g_vblank_pcr, g_vblank_stack);
+                fflush(stdout);
+            }
             PPCContext ctx{};
-            if (g_vblank_pcr) { ctx.r13.u64 = g_vblank_pcr; ctx.r1.u64 = g_vblank_stack; }
-            else { ctx.r1.u64 = 0x10000000; ctx.r13.u64 = 0x82000000; }
+            // Always use hardcoded PPC addresses for VBlank context
+            // r1 = temp stack at 0x10000000, r13 = data/TLS base at 0x82000000
+            ctx.r1.u64 = 0x10000000; ctx.r13.u64 = 0x82000000;
             ctx.r3.u32 = g_gpuRingBuffer.interruptUserData;
             ctx.r4.u32 = 0;
             cb(ctx, g_memory.base);
+            // Directly call VdSwap after callback to ensure frame presentation
+            extern void VdSwap();
+            static int vblankSwapCount = 0;
+            vblankSwapCount++;
+            if (vblankSwapCount <= 3 || vblankSwapCount % 60 == 0) {
+                printf("[VBlank] Calling VdSwap directly (#%d)\n", vblankSwapCount);
+                fflush(stdout);
+            }
+            VdSwap();
+        } else if (fireCount <= 3) {
+            printf("[VBlank-Fire] #%d cb=0x%08X NOT FOUND in dispatch table\n",
+                fireCount, g_gpuRingBuffer.interruptCallback);
+            fflush(stdout);
         }
+    } else if (fireCount <= 3) {
+        printf("[VBlank-Fire] #%d no callback registered yet\n", fireCount);
+        fflush(stdout);
     }
 }
 void VBlankTimerThread() {
@@ -8223,3 +8248,18 @@ void StartVBlankThread(){extern void _VideoPresent();if(s_vblankRunning.exchange
 // sub_8362A5F0 — let game init naturally (VBlank started from main.cpp)
 
 // Init loop breakers — skip functions that loop forever on uninitialized data
+void sub_83626A3C(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83626A3C #%d\n",n);
+}
+void sub_83627808(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83627808 #%d\n",n);
+}
+void sub_836267B0(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_836267B0 #%d\n",n);
+}
+// Override sub_83639628 to return 0 — prevents XamLoaderTerminateTitle
+// (_xstart calls this; if r3==0, skips terminate; if r3!=0, calls terminate)
+void sub_83639628(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83639628 #%d returning 0 (skip terminate)\n",n);
+    ctx.r3.s64 = 0;
+}

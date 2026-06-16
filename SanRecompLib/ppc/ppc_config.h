@@ -4,6 +4,7 @@
 
 // MMIO busy-wait detection — from rexglue analysis
 #define PPC_MMIO_DEBUG
+#define PPC_BUSYWAIT_BREAK_VAL 0xFFFFFFFF  // Write -1 (all bits set) to break busy-wait loops
 
 #define PPC_IMAGE_BASE 0x82000000ull
 #define PPC_IMAGE_SIZE 0x1DC0000ull

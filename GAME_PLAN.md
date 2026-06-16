@@ -73,15 +73,18 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 
 ### 2026-06-17 (Phase 9 — GPU 命令翻译 WIP)
 - ✅ SPIR-V 着色器编译：DXC 将 22 个 HLSL → SPIR-V .h 文件
-- ✅ video.cpp SPIR-V 包含解除 `#ifndef _WIN32` 守卫
-- ✅ CREATE_SHADER 宏支持 Windows+Vulkan（移除 `#ifndef _WIN32` 分支）
-- ✅ 全管线创建代码解锁：移除 `#if 0` + `return true;` 屏障
-- ✅ SEH 保护：`pipelineLayoutBuilder.begin()` → 空纹理创建在 `__try/__except` 中
-- ✅ 回退机制：全管线崩溃时自动回退到最小模式（g_pipelineLayout=nullptr 路径）
-- ✅ Vulkan 设备初始化正常（swap chain, semaphores, pipeline layout begin, descriptor set）
-- ⚠️ 全管线在空纹理创建处崩溃（0xC0000005），回退到最小渲染模式
-- ⚠️ PPC 代码仍卡在忙等（LR=0x822F4CC8, r1=0xA0），未进入渲染循环
-- 🔧 下一步：诊断 _xstart 初始化路径中的忙等循环
+- ✅ video.cpp SPIR-V 包含解除 + CREATE_SHADER 宏修复 Windows+Vulkan
+- ✅ `#if 0` 管线屏障移除，SEH 回退到最小渲染模式
+- ✅ VBlank 60Hz 回调确认工作，sub_822D41E8 被调用
+- ✅ VdSwap → _VideoPresent() → Video::Present() 链路完整
+- ✅ plume swap chain Present 调通（但无可呈现帧 — "Swapchain starved"）
+- ⚠️ 全管线在空纹理创建处崩溃（0xC0000005），SEH 回退到最小模式
+- ⚠️ PPC 主线程卡在忙等：轮询地址 0x838871A4，值从 0x10→0xFFFFFFFF 保持循环
+- ⚠️ PPC_LR=0x822F4CC8（BSS 代码区），忙等检测器正常触发但无法打破
+- ⚠️ VBlank 回调中 interruptUserData=0，导致 sub_822D41E8 的 r31=0，函数无法正常工作
+- ⚠️ 游戏未完成初始化，无法注册真实的 VdSetGraphicsInterruptCallback
+- ✅ 添加 init loop breakers + sub_83639628 覆盖（返回 0 跳过 XamLoaderTerminateTitle）
+- 🔧 下一步：打破 0x838871A4 忙等 → 游戏完成初始化 → 注册真实回调 → GPU 命令翻译
 
 ### 2026-06-16 (Session — Vulkan 迁移 + 渲染循环)
 - ✅ 研究 refs/ 所有项目渲染后端
