@@ -224,24 +224,49 @@ This file provides stubs for libraries not yet built. Current stub categories:
 - **PlayerLimitPatches::Init**: Empty stub
 - **_sub_829D1758, _sub_829D8860**: GTA V PPC function stubs
 
-## rexglue-sdk (Alternative Recompiler)
+## rexglue-sdk (Primary Recompiler)
 
-rexglue-sdk v0.8.0 is a newer recompilation framework (C++23, clang, Ninja). Pre-built binary at `refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe`.
+rexglue-sdk v0.8.0，C++23 + clang + Ninja，基于 Xenia 内核。
 
+**Wiki:** `refs/rexglue-sdk-wiki/`（已 clone，必读）
+**预编译工具:** `refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe`
+**生成代码:** `refs/rexglue-sdk/rexglue-bin/win-amd64/test_gta5/generated/default/`
+
+### 核心架构（从 Wiki 学习）
+- **Runtime**: 中央管理器，初始化顺序：Memory → ExportResolver → FunctionDispatcher → VFS → KernelState → Graphics/Audio/Input
+- **FunctionDispatcher**: guest PPC addr → host fn 指针的映射表，位于 PPC 内存 `IMAGE_BASE + IMAGE_SIZE`，索引 = `(addr - CODE_BASE) * 2`
+- **弱别名机制**: 每个重编译函数是 `__imp__name` 的弱别名。用 `REX_HOOK_RAW(name)` 可覆盖，`__imp__name` 总指向原始实现
+- **REX_HOOK_RAW**: `extern "C" void name(PPCContext& ctx, uint8_t* base)`，等价我们的强符号覆盖
+- **REX_STUB**: 日志+空操作 stub，`REX_STUB_RETURN(name, val)` 设置 r3 返回值
+- **KernelState**: 管理 3 个进程(Idle/System/Title)，对象表，线程注册，TLS，DPC
+- **模块加载**: 只加载 XEX 数据段(不加载代码)，代码已在编译时链接
+- **ReXCRT**: 可将 CRT 函数映射到 host 原生实现（malloc/memcpy 等）
+- **SEH**: `SEH_TRY/SEH_CATCH_ALL/SEH_RETHROW` 支持 PPC 异常处理
+
+### 与 XenonRecomp 关键差异
+| 特性 | XenonRecomp | rexglue |
+|---|---|---|
+| 弱别名 | 手动 `__attribute__((alias))` | `DEFINE_REX_FUNC` 宏自动生成 |
+| 覆盖机制 | 手动强符号定义 | `REX_HOOK`/`REX_HOOK_RAW`/`REX_STUB` |
+| 函数表 | `PPC_LOOKUP_FUNC` 宏 | `FunctionDispatcher` 类 |
+| 内核 | imports.cpp (~190 hooks) | KernelState + 完整 xboxkrnl/xam 实现 |
+| 内存 | VirtualAlloc 手动管理 | rex::Memory 子系统 |
+| 线程 | GuestThreadContext 手动 | XThread + KernelState::LaunchModule |
+| CRT | 无 | ReXCRT 映射（malloc→原生） |
+
+### rexglue 集成路径
+1. `rexglue init` → 生成项目脚手架
+2. `rexglue codegen manifest.toml` → 生成 193 .cpp + init.h/cpp
+3. CMakeLists.txt 中 `include(generated/rexglue.cmake)` + `rexglue_setup_target()`
+4. 入口: `rex::Runtime::Setup()` → `LaunchModule()` → `XThread` 启动重编译的入口函数
+5. 内核函数用 `REX_EXPORT(name, impl)` 注册，游戏函数用 `REX_HOOK_RAW(name)` 覆盖
+
+### 命令行
 ```bash
-# Initialize project from XEX
 REXGLUE="refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe"
-"$REXGLUE" init --project-name "GTA5" --xex-path "path/to/default.xex" --game-root "path/to/game"
-
-# Generate recompiled code (SLOW - 5.6M instructions)
-"$REXGLUE" codegen manifest.toml -v
+"$REXGLUE" init --app_name "GTA5" --app_root ./GTA5
+"$REXGLUE" codegen gta5_config.toml -v --force  # --force 跳过未解析调用
 ```
-
-Key differences from XenonRecomp:
-- Finds 310 import symbols (vs our ~50 stubs)
-- 10,728 code regions (vs ~546 files)
-- Built-in runtime (rex::Runtime, D3D12/Vulkan, audio, input)
-- No game_init.cpp needed — PPC code runs directly
 
 ## Next Session Starting Points
 
