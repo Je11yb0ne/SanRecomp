@@ -4190,6 +4190,21 @@ uint32_t KeGetCurrentProcessType()
 
 // ============================================================================
 
+
+
+// Strong override for sub_823F4D70 — TLS slot writer with null guard.
+void sub_823F4D70(PPCContext& __restrict ctx, uint8_t* base) {
+    uint32_t pcr_field336 = PPC_LOAD_U32(ctx.r13.u32 + 336);
+    if (pcr_field336 != 0) return;
+    uint32_t pcr_field256 = PPC_LOAD_U32(ctx.r13.u32 + 256);
+    if (pcr_field256 == 0) { static int n=0; if(++n<=3) printf("[PATCH] sub_823F4D70 null PCR+256\n"); return; }
+    PPC_STORE_U32(pcr_field256 + 352, ctx.r3.u32);
+}
+// Strong override for sub_823F4D90 — TLS init with deep recursion.
+// Breaks recursion to prevent stack overflow.
+void sub_823F4D90(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_823F4D90 #%d broken\n",n);
+}
 // Strong override for sub_823F4D8C — TLS init with self-recursion.
 // Breaks infinite recursion by returning immediately.
 void sub_823F4D8C(PPCContext& __restrict ctx, uint8_t* base) {
