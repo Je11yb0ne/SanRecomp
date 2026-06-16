@@ -490,9 +490,25 @@ int main(int argc, char *argv[])
     LOGN_WARNING(modulePath.string());
     // Video::StartPipelinePrecompilation();
 
-    GuestThread::Start({ entry, 0, 0, 0 });
+    GuestThread::Start({ entry, 0, 0, 0 }); fprintf(stderr, "[MAIN] PPC entry returned!
+"); fflush(stderr);
 
-    return 0;
+    // Keep the process alive — the main PPC entry point (_xstart) is just
+    // initialization. The actual game loop runs on other threads created
+    // during init. We need to pump events and keep the window open.
+    printf("[Main] Entry point returned — entering event loop\n");
+    fflush(stdout);
+    SDL_Event event;
+    while (true) {
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                printf("[Main] SDL_QUIT received — exiting\n");
+                fflush(stdout);
+                return 0;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
 }
 
 GUEST_FUNCTION_STUB(__imp__vsprintf);
