@@ -236,9 +236,8 @@ Key differences from XenonRecomp:
 
 ## Next Session Starting Points
 
-1. **完成 rexglue codegen** — 让 rexglue 完整生成 GTA V 重编译代码，对比分析差异
-2. **补全 310 个导入符号** — 根据 rexglue 发现的导入表或 IDA 分析，补全缺失的 ~260 个 kernel stubs
-3. **PPC 忙等定位** — 用 IDA 反编译入口点 0x83639888，找到 busy-wait 的内存地址，在 Host 端伪造值
-4. **对比 UnleashedRecomp 架构** — 参考其无 game_init.cpp 模式，评估是否移除 host 端初始化干预
-5. **Build SDL_mixer** — 配置 SDL_mixer cmake 构建，移除 stubs
-6. **Run XenosRecomp** — 转换 Xbox 360 .fxc shaders 到 DXIL
+1. ⭐ **rexglue 集成** — 用 rexglue 生成的 200+ PPC 文件替换 XenonRecomp 的 546 文件。rexglue 有完整的 kernel Runtime 和 310 导入实现，可解决零初始化内存导致的循环/崩溃问题。生成文件在 `refs/rexglue-sdk/rexglue-bin/win-amd64/test_gta5/generated/default/`
+2. **补全缺失的内核导入** — 对比 rexglue 的 310 导入 vs 当前 ~100 imports，补全关键函数
+3. **PPC 忙等定位** — 诊断剩余的忙等（sub_8363E1D8, sub_8363E870 等），用强符号覆盖或内存初始化
+4. **Build SDL_mixer** — 配置 SDL_mixer cmake 构建，移除 stubs
+5. **Run XenosRecomp** — 转换 Xbox 360 .fxc shaders 到 DXIL

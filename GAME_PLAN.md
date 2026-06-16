@@ -64,10 +64,24 @@
 - PPC 看门狗增强：追踪 r1/r3 寄存器 + 内核调用
   - 诊断结果：r1 静态 = 卡在单个函数内，无内核调用 → 疑似 busy-wait
 
-## Phase 5: rexglue 迁移 — PPC 启动调试 (IN PROGRESS)
+## Phase 5: rexglue 迁移 — PPC 启动调试 ✅ (诊断完成)
+
 **决策 (2026-06-16):** rexglue-sdk v0.8.0 作为主要重编译器，XenonRecomp 保留辅助
 **理由:** 310 import symbols vs 50, built-in Runtime, 5.6M instruction analysis
-**当前阻塞:** PPC 代码在 `sub_8363E1D8` 中忙等（未初始化链表遍历）
+**诊断结论:** XenonRecomp 的零初始化 PPC 内存导致游戏的未初始化数据结构引起各种循环/崩溃
+
+## Phase 6: rexglue 集成 (NEXT ⭐)
+
+**任务:**
+1. 用 rexglue 生成的代码替换 XenonRecomp PPC 代码
+2. 集成 rexglue Runtime（kernel, D3D12, audio, input）
+3. 对比 rexglue 的 310 导入实现 vs 我们当前的 ~100 imports
+4. 验证游戏可以完成启动初始化
+
+**rexglue 生成的文件:** `refs/rexglue-sdk/rexglue-bin/win-amd64/test_gta5/generated/default/`
+- 200+ recomp 文件 (gta5_test_recomp.*.cpp)
+- gta5_test_init.cpp/h: 函数注册表 (~83K 条目)
+- gta5_test_register.cpp: 函数映射表
 
 ## Phase 5 Progress Log
 
