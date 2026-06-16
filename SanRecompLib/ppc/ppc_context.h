@@ -34,13 +34,20 @@
 
 #define PPC_FUNC_PROLOGUE() __builtin_assume(((size_t)base & 0x1F) == 0)
 
+// PPC addresses are 32-bit. Mask all accesses to prevent 64-bit overflow
+// (e.g., 0xFFFFFFFF + 1 = 0x100000000 in 64-bit, but wraps to 0 in real PPC).
+#define PPC_ADDR32(x) ((uint32_t)((x) & 0xFFFFFFFFu))
+
 #ifndef PPC_LOAD_U8
-#define PPC_LOAD_U8(x) *(volatile uint8_t*)(base + (x))
+#define PPC_LOAD_U8(x) *(volatile uint8_t*)(base + PPC_ADDR32(x))
 #endif
 
 #ifndef PPC_LOAD_U16
-#define PPC_LOAD_U16(x) __builtin_bswap16(*(volatile uint16_t*)(base + (x)))
+#define PPC_LOAD_U16(x) __builtin_bswap16(*(volatile uint16_t*)(base + PPC_ADDR32(x)))
 #endif
+
+// Global PPC LR for busy-wait detector (set by crash_guard or watchdog)
+extern uint64_t g_ppc_lr_for_debug;
 
 // Busy-wait detection — breaks infinite loops by tracking repeated reads
 #ifndef PPC_LOAD_U32
@@ -55,10 +62,9 @@ static inline uint32_t _ppc_busywait_load32(uint8_t* base, uint32_t addr) {
     if (addr == s_last_addr) {
         s_counter++;
         if (s_counter == 100) {
-            // Report busy-wait
-            printf("[BUSY-WAIT] Detected at addr=0x%08X val=0x%08X caller=%p\n",
+            printf("[BUSY-WAIT] Detected at addr=0x%08X val=0x%08X PPC_LR=0x%08llX\n",
                 addr, __builtin_bswap32(*(volatile uint32_t*)(base + addr)),
-                __builtin_return_address(0));
+                (unsigned long long)g_ppc_lr_for_debug);
             fflush(stdout);
             s_break_next = true;  // break any busy-wait loop
         }
@@ -92,7 +98,7 @@ static inline uint32_t _ppc_busywait_load32(uint8_t* base, uint32_t addr) {
 #endif
 
 #ifndef PPC_LOAD_U64
-#define PPC_LOAD_U64(x) __builtin_bswap64(*(volatile uint64_t*)(base + (x)))
+#define PPC_LOAD_U64(x) __builtin_bswap64(*(volatile uint64_t*)(base + PPC_ADDR32(x)))
 #endif
 
 // TODO: Implement.
@@ -116,19 +122,19 @@ static inline uint32_t _ppc_busywait_load32(uint8_t* base, uint32_t addr) {
 #endif
 
 #ifndef PPC_STORE_U8
-#define PPC_STORE_U8(x, y) *(volatile uint8_t*)(base + (x)) = (y)
+#define PPC_STORE_U8(x, y) *(volatile uint8_t*)(base + PPC_ADDR32(x)) = (y)
 #endif
 
 #ifndef PPC_STORE_U16
-#define PPC_STORE_U16(x, y) *(volatile uint16_t*)(base + (x)) = __builtin_bswap16(y)
+#define PPC_STORE_U16(x, y) *(volatile uint16_t*)(base + PPC_ADDR32(x)) = __builtin_bswap16(y)
 #endif
 
 #ifndef PPC_STORE_U32
-#define PPC_STORE_U32(x, y) *(volatile uint32_t*)(base + (x)) = __builtin_bswap32(y)
+#define PPC_STORE_U32(x, y) *(volatile uint32_t*)(base + PPC_ADDR32(x)) = __builtin_bswap32(y)
 #endif
 
 #ifndef PPC_STORE_U64
-#define PPC_STORE_U64(x, y) *(volatile uint64_t*)(base + (x)) = __builtin_bswap64(y)
+#define PPC_STORE_U64(x, y) *(volatile uint64_t*)(base + PPC_ADDR32(x)) = __builtin_bswap64(y)
 #endif
 
 // MMIO Store handling is completely reliant on being preeceded by eieio.
@@ -153,7 +159,7 @@ static inline uint32_t _ppc_busywait_load32(uint8_t* base, uint32_t addr) {
 #define PPC_CALL_FUNC(x) x(ctx, base)
 #endif
 
-#define PPC_MEMORY_SIZE 0x100000000ull
+#define PPC_MEMORY_SIZE 0x200000000ull  // 8GB — needed for XEX + heap + thread stacks
 
 #define PPC_LOOKUP_FUNC(x, y) *(PPCFunc**)(x + PPC_IMAGE_BASE + PPC_IMAGE_SIZE + (uint64_t(uint32_t(y) - PPC_CODE_BASE) * 2))
 

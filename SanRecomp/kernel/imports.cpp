@@ -4214,12 +4214,18 @@ void sub_8363E870(PPCContext& __restrict ctx, uint8_t* base) {
     uint32_t size = ctx.r5.u32;
 
     if (size == 0) size = 4096;
-    // Cap at 32MB to avoid exhausting PPC memory
-    if (size > 0x02000000) size = 0x02000000;
+    // Cap at 16MB to avoid exhausting PPC memory (Xbox 360 had only 512MB)
+    uint32_t orig_size = size;
+    if (size > 0x01000000) size = 0x01000000;
 
     uint32_t ppc_addr = s_ppc_heap.fetch_add((size + 0xFFF) & ~0xFFF);
-    // Don't let heap grow into XEX region
-    if (ppc_addr >= 0x70000000) {
+    // Don't let heap grow beyond 3.5GB (leave room for stack, etc.)
+    if (ppc_addr >= 0xE0000000) {
+        static int s_fail_count = 0;
+        if (++s_fail_count <= 5) {
+            printf("[PATCH] sub_8363E870 OOM! heap=0x%08X requested=0x%X\n", ppc_addr, orig_size);
+            fflush(stdout);
+        }
         ctx.r3.s64 = 0;
         return;
     }
@@ -4228,9 +4234,11 @@ void sub_8363E870(PPCContext& __restrict ctx, uint8_t* base) {
     memset(base + ppc_addr, 0, size);
 
     static int s_count = 0;
-    if (++s_count <= 30) {
-        printf("[PATCH] sub_8363E870 #%d pool=0x%08X size=0x%X → PPC=0x%08X\n",
-            s_count, pool, size, ppc_addr);
+    static uint32_t s_total_alloc = 0;
+    s_total_alloc += size;
+    if (++s_count <= 5 || s_count % 50 == 0) {
+        printf("[PATCH] sub_8363E870 #%d pool=0x%08X size=0x%X→0x%X PPC=0x%08X total=%uMB\n",
+            s_count, pool, orig_size, size, ppc_addr, s_total_alloc / 1048576);
         fflush(stdout);
     }
 

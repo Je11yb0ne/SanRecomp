@@ -10,6 +10,8 @@
 
 // Global PPC context pointer (current thread)
 PPCContext* g_ppcContext = nullptr;
+// Global PPC LR for busy-wait detector in ppc_context.h
+uint64_t g_ppc_lr_for_debug = 0;
 
 static thread_local PPCContext* tls_PPCContext = nullptr;
 
@@ -260,6 +262,13 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
     printf("[GuestThread] Starting guest code at 0x%08X\n", params.function);
     fflush(stdout);
     
+    // Guard against invalid function addresses from uninitialized data
+    if (params.function == 0 || params.function >= PPC_CODE_BASE + PPC_CODE_SIZE) {
+        printf("[GuestThread] ERROR: Invalid entry point 0x%08X\n", params.function);
+        fflush(stdout);
+        return 0;
+    }
+
     auto func = g_memory.FindFunction(params.function);
     if (func == nullptr) {
         printf("[GuestThread] ERROR: Function not found at 0x%08X\n", params.function);
@@ -282,6 +291,7 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
                 uint32_t currentR1 = ctx.ppcContext.r1.u32;
                 uint32_t currentR3 = ctx.ppcContext.r3.u32;
                 uint32_t currentLR = ctx.ppcContext.lr;
+                g_ppc_lr_for_debug = currentLR;  // for busy-wait detector
                 bool r1Changed = (currentR1 != lastR1);
                 printf("[PPC-Watchdog] tick=%u r1=0x%08X r3=0x%08X lr=0x%08X %s\n",
                     tick, currentR1, currentR3, currentLR,
