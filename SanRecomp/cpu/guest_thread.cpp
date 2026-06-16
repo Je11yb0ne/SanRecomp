@@ -305,6 +305,12 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
 
     ScopedCrashGuard crashGuard;
     ScopedCrashGuard::s_base = g_memory.base;  // for execute-fault recovery
+
+    // Ensure low PPC memory pages (addr 0-0x1000) are committed and writable.
+    // The sentinel writes to these addresses, but they may get decommitted
+    // when the 8GB VirtualAlloc at 0x100000000 fails and falls back to nullptr.
+    VirtualAlloc(g_memory.base, 0x1000, MEM_COMMIT, PAGE_READWRITE);
+
     func(ctx.ppcContext, g_memory.base);
 
     ppcRunning.store(false);
