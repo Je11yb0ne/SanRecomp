@@ -96,70 +96,28 @@ extern void KernelPhase_EnterRuntime();
 #include "shader/msl/resolve_msaa_depth_8x.metal.metallib.h"
 #endif
 
-#ifndef _WIN32 // SPIR-V disabled on Windows
-// DISABLED-SPIRV: #include "shader/hlsl/blend_color_alpha_ps.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
-// DISABLED-SPIRV: #include "shader/hlsl/copy_vs.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
-// DISABLED-SPIRV: #include "shader/hlsl/copy_color_ps.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
-// DISABLED-SPIRV: #include "shader/hlsl/copy_depth_ps.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
-// DISABLED-SPIRV: #include "shader/hlsl/csd_filter_ps.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
-// DISABLED-SPIRV: #include "shader/hlsl/csd_no_tex_vs.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
+#include "shader/hlsl/blend_color_alpha_ps.hlsl.spirv.h"
+#include "shader/hlsl/copy_vs.hlsl.spirv.h"
+#include "shader/hlsl/copy_color_ps.hlsl.spirv.h"
+#include "shader/hlsl/copy_depth_ps.hlsl.spirv.h"
+#include "shader/hlsl/csd_filter_ps.hlsl.spirv.h"
+#include "shader/hlsl/csd_no_tex_vs.hlsl.spirv.h"
 #include "shader/hlsl/csd_vs.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/enhanced_burnout_blur_vs.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/enhanced_burnout_blur_ps.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/gamma_correction_ps.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/gaussian_blur_3x3.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/gaussian_blur_5x5.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/gaussian_blur_7x7.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/gaussian_blur_9x9.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/imgui_ps.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/imgui_vs.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/resolve_msaa_color_2x.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/resolve_msaa_color_4x.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/resolve_msaa_color_8x.hlsl.spirv.h"
-#endif
-// DISABLED-SPIRV: #include "shader/hlsl/resolve_msaa_depth_2x.hlsl.spirv.h"
-#ifndef _WIN32 // SPIR-V disabled on Windows
+#include "shader/hlsl/resolve_msaa_depth_2x.hlsl.spirv.h"
 #include "shader/hlsl/resolve_msaa_depth_4x.hlsl.spirv.h"
-#endif
-#ifndef _WIN32 // SPIR-V disabled on Windows
 #include "shader/hlsl/resolve_msaa_depth_8x.hlsl.spirv.h"
-#endif
 
 #ifdef _WIN32
 extern "C"
@@ -1652,17 +1610,12 @@ static std::unique_ptr<GuestShader> g_enhancedBurnoutBlurPSShader;
 
 #if defined(SAN_RECOMP_D3D12)
 
-#ifndef _WIN32
 #define CREATE_SHADER(NAME) \
     g_device->createShader( \
         (g_backend == Backend::VULKAN) ? g_##NAME##_spirv : g_##NAME##_dxil, \
         (g_backend == Backend::VULKAN) ? sizeof(g_##NAME##_spirv) : sizeof(g_##NAME##_dxil), \
         "shaderMain", \
         (g_backend == Backend::VULKAN) ? RenderShaderFormat::SPIRV : RenderShaderFormat::DXIL)
-#else
-#define CREATE_SHADER(NAME) \
-    g_device->createShader(g_##NAME##_dxil, sizeof(g_##NAME##_dxil), "shaderMain", RenderShaderFormat::DXIL)
-#endif
 
 #elif defined(SAN_RECOMP_METAL)
 
@@ -2305,11 +2258,12 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
         printf("[Video] CRASH in render setup (outer)! Code=0x%08X\n", GetExceptionCode()); fflush(stdout);
         return false;
     }
-    printf("[Video] Post-SEH: setting up minimal swap chain + backbuffer...\n"); fflush(stdout);
+    // Vulkan-only mode: skip minimal setup, go straight to full pipeline
+    printf("[Video] Post-SEH: proceeding to full pipeline setup...\n"); fflush(stdout);
+    goto full_pipeline_setup;
 
     // =========================================================================
-    // Minimal swap chain + backbuffer setup
-    // Bypasses Intel D3D12 pipeline creation crashes while enabling basic Present
+    // Minimal swap chain + backbuffer setup (SKIPPED for Vulkan)
     // =========================================================================
     {
         uint32_t bufferCount;
@@ -2470,27 +2424,24 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
             }
         }
     }
-    printf("[Video] Minimal setup done, returning true\n"); fflush(stdout);
-    return true;
-
-#if 0 // DISABLED: Pipeline setup crashes on Intel D3D12
+full_pipeline_setup:
+    // Full rendering pipeline setup for Vulkan backend
+    printf("[Video] Setting up full rendering pipeline for Vulkan...\n"); fflush(stdout);
+    uint32_t bufferCount;
     switch (Config::TripleBuffering)
     {
     case ETripleBuffering::Auto:
         switch (g_backend) {
         case Backend::VULKAN:
-            // Defaulting to 3 is fine if presentWait as supported, as the maximum frame latency allowed is only 1.
             bufferCount = g_device->getCapabilities().presentWait ? 3 : 2;
             break;
         case Backend::D3D12:
-            // Defaulting to 3 is fine on D3D12 thanks to flip discard model.
             bufferCount = 3;
             break;
         case Backend::METAL:
             bufferCount = 2;
             break;
         }
-
         break;
     case ETripleBuffering::On:
         bufferCount = 3;
@@ -2500,37 +2451,57 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
         break;
     }
 
-    printf("[Video] Creating swap chain...\n"); fflush(stdout);
-    g_swapChain = g_queue->createSwapChain(RenderSwapChainDesc(GameWindow::s_renderWindow, BACKBUFFER_FORMAT, bufferCount, false, Config::MaxFrameLatency));
-    printf("[Video] Swap chain created: %p\n", (void*)g_swapChain.get()); fflush(stdout);
-    g_swapChain->setVsyncEnabled(Config::VSync);
-    printf("[Video] VSync set\n"); fflush(stdout);
+    __try {
+        printf("[Video] Creating swap chain...\n"); fflush(stdout);
+        g_swapChain = g_queue->createSwapChain(RenderSwapChainDesc(GameWindow::s_renderWindow, BACKBUFFER_FORMAT, bufferCount, false, Config::MaxFrameLatency));
+        printf("[Video] Swap chain created: %p\n", (void*)g_swapChain.get()); fflush(stdout);
+        g_swapChain->setVsyncEnabled(Config::VSync);
+        printf("[Video] VSync set\n"); fflush(stdout);
     } __except(EXCEPTION_EXECUTE_HANDLER) {
         printf("[Video] CRASH in swap chain setup! Code=0x%08X\n", GetExceptionCode()); fflush(stdout);
         return false;
     }
-    // FIXME: Skip complex rendering setup (ImGui fonts, shaders, pipelines)
-    // to get a basic window + swap chain working on Intel GPU.
-    // TODO: Fix crashes in pipeline creation for Intel D3D12 driver.
-    printf("[Video] WARNING: Skipping pipeline/ImGui setup for testing\n"); fflush(stdout);
-    return true;
 
+    printf("[Video] Creating semaphores...\n"); fflush(stdout);
     for (auto& acquireSemaphore : g_acquireSemaphores)
         acquireSemaphore = g_device->createCommandSemaphore();
-    
+
     for (auto& renderSemaphore : g_renderSemaphores)
         renderSemaphore = g_device->createCommandSemaphore();
+    printf("[Video] Semaphores done\n"); fflush(stdout);
 
+    printf("[Video] Creating pipeline layout...\n"); fflush(stdout);
     RenderPipelineLayoutBuilder pipelineLayoutBuilder;
-    pipelineLayoutBuilder.begin(false, true);
-    
     RenderDescriptorSetBuilder descriptorSetBuilder;
-    descriptorSetBuilder.begin();
-    descriptorSetBuilder.addTexture(0, TEXTURE_DESCRIPTOR_SIZE);
-    descriptorSetBuilder.end(true, TEXTURE_DESCRIPTOR_SIZE);
-    
-    g_textureDescriptorSet = descriptorSetBuilder.create(g_device.get());
-    
+    bool pipelineSetupFailed = false;
+    __try {
+        pipelineLayoutBuilder.begin(false, true);
+        printf("[Video] Pipeline layout begin done\n"); fflush(stdout);
+
+        descriptorSetBuilder.begin();
+        descriptorSetBuilder.addTexture(0, TEXTURE_DESCRIPTOR_SIZE);
+        descriptorSetBuilder.end(true, TEXTURE_DESCRIPTOR_SIZE);
+
+        g_textureDescriptorSet = descriptorSetBuilder.create(g_device.get());
+        printf("[Video] Texture descriptor set created\n"); fflush(stdout);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        printf("[Video] CRASH in pipeline layout / descriptor set! Code=0x%08X — falling back to minimal mode\n", GetExceptionCode()); fflush(stdout);
+        pipelineSetupFailed = true;
+    }
+
+    if (pipelineSetupFailed) {
+        g_pipelineLayout = nullptr;
+        g_textureDescriptorSet = nullptr;
+        CheckSwapChain();
+        BeginCommandList();
+        printf("[Video] CreateHostDevice SUCCESS (minimal fallback)\n"); fflush(stdout);
+        return true;
+    }
+
+    // Wrap the remaining pipeline setup in SEH — any crash falls back to minimal mode
+    bool fullPipelineFailed = false;
+    __try {
+
     for (size_t i = 0; i < TEXTURE_DESCRIPTOR_NULL_COUNT; i++)
     {
         auto& texture = g_blankTextures[i];
@@ -2722,8 +2693,32 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
 
     g_commandLists[g_frame]->barriers(RenderBarrierStage::NONE, blankTextureBarriers, std::size(blankTextureBarriers));
 
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        printf("[Video] CRASH in full pipeline setup! Code=0x%08X — falling back to minimal mode\n", GetExceptionCode()); fflush(stdout);
+        fullPipelineFailed = true;
+    }
+
+    if (fullPipelineFailed) {
+        printf("[Video] Entering minimal fallback...\n"); fflush(stdout);
+        g_pipelineLayout = nullptr;
+        g_textureDescriptorSet = nullptr;
+        // Set up minimal backbuffer
+        if (!g_backBufferHolder) {
+            g_backBufferHolder = std::make_unique<GuestSurface>(ResourceType::RenderTarget);
+            g_backBuffer = g_backBufferHolder.get();
+            g_backBuffer->width = 1280;
+            g_backBuffer->height = 720;
+            g_backBuffer->format = BACKBUFFER_FORMAT;
+            g_backBuffer->textureHolder = g_device->createTexture(
+                RenderTextureDesc::Texture2D(1, 1, 1, BACKBUFFER_FORMAT,
+                    RenderTextureFlag::RENDER_TARGET));
+        }
+        printf("[Video] CreateHostDevice SUCCESS (minimal fallback)\n"); fflush(stdout);
+        return true;
+    }
+
+    printf("[Video] CreateHostDevice SUCCESS\n"); fflush(stdout);
     return true;
-#endif // DISABLED: Pipeline setup crashes on Intel D3D12
 }
 
 static uint32_t g_waitForGPUCount = 0;
