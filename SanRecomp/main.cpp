@@ -492,6 +492,29 @@ int main(int argc, char *argv[])
 
     GuestThread::Start({ entry, 0, 0, 0 });
 
+    // Event loop — keep window alive after PPC _xstart returns
+    // The VBlank timer drives rendering at 60Hz
+    printf("[Main] _xstart returned, entering event loop...\n");
+    fflush(stdout);
+
+    // Restart VBlank timer in main thread context (ensure it keeps running)
+    extern void StartVBlankTimer();
+    extern void StopVBlankTimer();
+    printf("[Main] Restarting VBlank timer...\n");
+    fflush(stdout);
+    StartVBlankTimer();  // This is safe to call multiple times (checks running flag)
+
+    while (true) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                printf("[Main] SDL_QUIT received, exiting\n");
+                fflush(stdout);
+                std::_Exit(0);
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
     return 0;
 }
 

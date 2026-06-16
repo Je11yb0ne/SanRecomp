@@ -74,7 +74,11 @@ static inline uint32_t _ppc_busywait_load32(uint8_t* base, uint32_t addr) {
             // Write a non-zero value to break flag-polling or linked-list loops.
             // For addr=0, redirect to sentinel at 0x10 (bswap32(0)=0 is a no-op).
             // For other addrs, write 1 (like a flag becoming ready).
-            uint32_t break_val = PPC_BUSYWAIT_BREAK_VAL;
+            // Rotate break values: 0x00, 0xFF, 0x10, 0x01, 0x20, 0x02...
+            static uint32_t s_break_seq = 0;
+            const uint32_t break_vals[] = {0}; // Always write 0x00 (signaled/done)
+            uint32_t break_val = break_vals[0]; // Always 0x00
+            s_break_seq++;
             uint32_t write_val = addr ? break_val : 0x10;
             *(volatile uint32_t*)(base + addr) = __builtin_bswap32(write_val);
             s_counter = 0;

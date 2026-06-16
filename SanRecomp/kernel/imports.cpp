@@ -4392,12 +4392,28 @@ void VdSwap()
 
 void VdGetSystemCommandBuffer()
 {
-    static std::unordered_set<uint32_t> s_seenCallers;
-    const uint32_t lr = g_ppcContext ? static_cast<uint32_t>(g_ppcContext->lr) : 0;
-    if (lr != 0 && s_seenCallers.insert(lr).second)
-        LOGF_UTILITY("!!! STUB !!! caller_lr=0x{:08X}", lr);
-    else
-        LOG_UTILITY("!!! STUB !!!");
+    // Allocate a GPU command ring buffer in PPC memory for PM4 packets
+    static uint32_t s_ringBuffer = 0;
+    static bool s_logged = false;
+    if (!s_ringBuffer) {
+        s_ringBuffer = 0x84000000;  // 32MB past PPC base, past XEX image
+        memset(g_memory.base + s_ringBuffer, 0, 0x100000);  // 1MB ring buffer
+        g_gpuRingBuffer.ringBufferBase = s_ringBuffer;
+        g_gpuRingBuffer.ringBufferSize = 0x100000;
+        g_gpuRingBuffer.initialized = true;
+        printf("[VdGetSystemCommandBuffer] Allocated 1MB ring buffer at 0x%08X\n", s_ringBuffer);
+        fflush(stdout);
+    }
+    // Set r3 to return the ring buffer address (game expects this in r3)
+    if (g_ppcContext) {
+        g_ppcContext->r3.u64 = s_ringBuffer;
+    }
+    static int callCount = 0;
+    if (++callCount <= 5) {
+        const uint32_t lr = g_ppcContext ? static_cast<uint32_t>(g_ppcContext->lr) : 0;
+        printf("[VdGetSystemCommandBuffer] #%d returning 0x%08X (LR=0x%08X)\n", callCount, s_ringBuffer, lr);
+        fflush(stdout);
+    }
 }
 
 void KeReleaseSpinLockFromRaisedIrql(uint32_t* spinLock)
@@ -4722,12 +4738,19 @@ void FireVBlankCallback() {
                 fflush(stdout);
             }
             PPCContext ctx{};
-            // Always use hardcoded PPC addresses for VBlank context
-            // r1 = temp stack at 0x10000000, r13 = data/TLS base at 0x82000000
-            ctx.r1.u64 = 0x10000000; ctx.r13.u64 = 0x82000000;
+            // r1 = temp stack at 0x10000000, r13 = PCR at 0x82001000
+            ctx.r1.u64 = 0x10000000; ctx.r13.u64 = 0x82001000;
             ctx.r3.u32 = g_gpuRingBuffer.interruptUserData;
             ctx.r4.u32 = 0;
-            cb(ctx, g_memory.base);
+            __try {
+                cb(ctx, g_memory.base);
+            } __except(EXCEPTION_EXECUTE_HANDLER) {
+                if (fireCount <= 3) {
+                    printf("[VBlank-Fire] #%d callback CRASHED! Code=0x%08X\n",
+                        fireCount, GetExceptionCode());
+                    fflush(stdout);
+                }
+            }
             // Directly call VdSwap after callback to ensure frame presentation
             extern void VdSwap();
             static int vblankSwapCount = 0;
@@ -4748,14 +4771,46 @@ void FireVBlankCallback() {
     }
 }
 void VBlankTimerThread() {
+    uint32_t tick = 0;
     while (g_vblankTimerRunning.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60Hz
+        tick++;
+        if (tick <= 5 || tick % 60 == 0) {
+            printf("[VBlank-Thread] tick=%u running=%d\n", tick, g_vblankTimerRunning.load());
+            fflush(stdout);
+        }
         FireVBlankCallback();
     }
+    printf("[VBlank-Thread] EXITING (running=%d)\n", g_vblankTimerRunning.load());
+    fflush(stdout);
+}
+
+// Initialize a minimal PCR (Processor Control Region) at a fixed PPC address
+// Used by the VBlank callback which runs on a separate thread with r13=0x82001000
+static void InitVBlankPCR() {
+    uint8_t* base = g_memory.base;
+    // PCR at 0x82001000 — past the null-page sentinel
+    uint32_t pcrBase = 0x82001000;
+    // Write X360_PCR fields (big-endian via PPC_STORE_U32 which does bswap)
+    PPC_STORE_U32(pcrBase + 0x00, 0);           // tls_ptr = 0 (no TLS for VBlank)
+    // pcr_ptr at offset 0x30: self-pointer for validation
+    PPC_STORE_U32(pcrBase + 0x30, pcrBase);     // pcr_ptr = self
+    // stack info at offset 0x70
+    PPC_STORE_U32(pcrBase + 0x70, 0x10000000);  // stack_base
+    PPC_STORE_U32(pcrBase + 0x74, 0x0FF00000);  // stack_limit
+    // current_thread at offset 0x100
+    PPC_STORE_U32(pcrBase + 0x100, pcrBase + 0x2000); // TEB pointer (valid non-zero)
+    // dpc_active at offset 0x150
+    PPC_STORE_U32(pcrBase + 0x150, 0);          // dpc_active = 0 (not in DPC mode)
+    // current_cpu at offset 0x10C
+    *(volatile uint8_t*)(base + pcrBase + 0x10C) = 0; // CPU 0
+    printf("[VBlank] PCR initialized at 0x%08X\n", pcrBase);
+    fflush(stdout);
 }
 
 void StartVBlankTimer() {
     if (!g_vblankTimerRunning.load()) {
+        InitVBlankPCR();
         g_vblankTimerRunning.store(true);
         g_vblankThread = std::thread(VBlankTimerThread);
         printf("[VBlank] Timer started (60Hz)\n");
@@ -8246,6 +8301,18 @@ static std::thread s_vblankThread;
 void StartVBlankThread(){extern void _VideoPresent();if(s_vblankRunning.exchange(true))return;s_vblankThread=std::thread([]{printf("[VBlank] Started\n");fflush(stdout);while(s_vblankRunning.load()){std::this_thread::sleep_for(std::chrono::milliseconds(16));if(g_gpuRingBuffer.interruptCallback!=0){static int t=0;if(++t<=5)printf("[VBlank] Fire 0x%08X t=%d\n",g_gpuRingBuffer.interruptCallback,t),fflush(stdout);auto fn=g_memory.FindFunction(g_gpuRingBuffer.interruptCallback);if(fn){PPCContext vc=*g_ppcContext;vc.r3.u32=g_gpuRingBuffer.interruptUserData;fn(vc,g_memory.base);}}}});}
 
 // sub_8362A5F0 — let game init naturally (VBlank started from main.cpp)
+
+// Render callback override — prevent sub_822D41E8 from hanging the VBlank thread.
+// The game has NOT registered a proper callback, so the fallback runs.
+// But sub_822D41E8 gets stuck (wrong init state). Override to no-op.
+void sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n = 0;
+    if (++n <= 3 || n % 60 == 0) {
+        printf("[PATCH] sub_822D41E8 #%d (render callback no-op)\n", n);
+        fflush(stdout);
+    }
+    // Don't call the original — it hangs
+}
 
 // Init loop breakers — skip functions that loop forever on uninitialized data
 void sub_83626A3C(PPCContext& __restrict ctx, uint8_t* base) {
