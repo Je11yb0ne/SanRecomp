@@ -4826,18 +4826,12 @@ static void InitVBlankPCR() {
     printf("[VBlank] PCR initialized at 0x%08X\n", pcrBase);
     fflush(stdout);
 
-    // Ensure PPC memory for graphics state is committed + initialized
+    // Ensure PPC memory for graphics state is committed + zero-initialized
     uint32_t gfxBase = 0x83800000;
     size_t gfxSize = 0x800000; // 8MB
     VirtualAlloc(g_memory.base + gfxBase, gfxSize, MEM_COMMIT, PAGE_READWRITE);
     memset(g_memory.base + gfxBase, 0, gfxSize);
-    // Pre-fill with small non-zero values (1) to prevent divide-by-zero.
-    // Zero = null check passes (skip), non-zero = math doesn't div/0.
-    // Only fill the first 64KB — larger offsets are likely unused.
-    for (uint32_t off = 0; off < 0x10000; off += 4) {
-        PPC_STORE_U32(gfxBase + off, 1);
-    }
-    printf("[VBlank] Graphics state: 0x%08X-0x%08X (8MB, first 64KB=1)\n",
+    printf("[VBlank] Graphics state: 0x%08X-0x%08X (8MB zeros)\n",
         gfxBase, gfxBase + (uint32_t)gfxSize);
     fflush(stdout);
 
@@ -8371,19 +8365,30 @@ void StartVBlankThread(){extern void _VideoPresent();if(s_vblankRunning.exchange
 
 // sub_8362A5F0 — let game init naturally (VBlank started from main.cpp)
 
-// Render callback — stable no-op while graphics state reverse engineering is pending.
-// Test results with different initializations:
-//   Zeros (0x00):         Frame 1 OK (skips), Frame 2+ DIVIDE_BY_ZERO (0xC0000094)
-//   Self-refs (addr):     ACCESS_VIOLATION (0xC0000005) — dereferences pointer chains
-//   Small values (1):     ACCESS_VIOLATION (0xC0000005) — same as self-refs
-// FIX: Analyze graphics state structure at 0x83830000 via IDA to determine
-// which offsets need 0 (null ptrs → skip) vs non-zero (counts/sizes → no div/0).
+// Forward declaration: original PPC function
+extern "C" void __imp__sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base);
+
+// Render callback — try original with zero state, re-zero after each frame.
+// Zeros pass null checks (skip processing) but cause div/0 on frame 2+
+// because frame 1 writes to state. Re-zeroing prevents accumulation.
 void sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base) {
     static int n = 0;
     n++;
+    // Re-zero the graphics state (undo modifications from previous frame)
+    // Only clear known offsets that the callback writes to (48, 16968, 23760, etc.)
+    uint32_t gfxBase = 0x83800000;
+    memset(base + gfxBase, 0, 0x10000); // 64KB is enough for all known offsets
     if (n <= 3 || n % 60 == 0) {
-        printf("[CALLBACK] sub_822D41E8 #%d r3=0x%08llX (no-op)\n", n, (unsigned long long)ctx.r3.u64);
+        printf("[CALLBACK] sub_822D41E8 #%d r3=0x%08llX (with re-zero)\n", n, (unsigned long long)ctx.r3.u64);
         fflush(stdout);
+    }
+    __try {
+        __imp__sub_822D41E8(ctx, base);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        if (n <= 5) {
+            printf("[CALLBACK] sub_822D41E8 #%d CRASHED Code=0x%08X\n", n, GetExceptionCode());
+            fflush(stdout);
+        }
     }
 }
 
