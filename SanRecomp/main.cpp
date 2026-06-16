@@ -503,3 +503,4 @@ GUEST_FUNCTION_STUB(__imp___snwprintf);
 GUEST_FUNCTION_STUB(__imp__vswprintf);
 GUEST_FUNCTION_STUB(__imp___vscwprintf);
 GUEST_FUNCTION_STUB(__imp__swprintf);
+extern "C" void _VideoPresent() { Video::Present(); }
