@@ -4828,14 +4828,16 @@ static void InitVBlankPCR() {
 
     // Ensure PPC memory for graphics state is committed + initialized
     uint32_t gfxBase = 0x83800000;
-    size_t gfxSize = 0x800000; // 8MB — enough for any pointer chain dereferences
+    size_t gfxSize = 0x800000; // 8MB
     VirtualAlloc(g_memory.base + gfxBase, gfxSize, MEM_COMMIT, PAGE_READWRITE);
-
-    // Initialize with self-referential pointers to prevent null derefs
-    for (uint32_t off = 0; off < gfxSize; off += 4) {
-        PPC_STORE_U32(gfxBase + off, gfxBase + off);
+    memset(g_memory.base + gfxBase, 0, gfxSize);
+    // Pre-fill with small non-zero values (1) to prevent divide-by-zero.
+    // Zero = null check passes (skip), non-zero = math doesn't div/0.
+    // Only fill the first 64KB — larger offsets are likely unused.
+    for (uint32_t off = 0; off < 0x10000; off += 4) {
+        PPC_STORE_U32(gfxBase + off, 1);
     }
-    printf("[VBlank] Graphics state: 0x%08X-0x%08X (8MB self-refs)\n",
+    printf("[VBlank] Graphics state: 0x%08X-0x%08X (8MB, first 64KB=1)\n",
         gfxBase, gfxBase + (uint32_t)gfxSize);
     fflush(stdout);
 
@@ -8369,10 +8371,13 @@ void StartVBlankThread(){extern void _VideoPresent();if(s_vblankRunning.exchange
 
 // sub_8362A5F0 — let game init naturally (VBlank started from main.cpp)
 
-// Render callback — currently no-op because original function crashes.
-// The game's sub_822D41E8 needs properly initialized graphics state at r3 (userData).
-// Until we can properly initialize the D3D device/graphics state, keep as no-op.
-// Frame presentation is handled by PrepareFrameAndPresent() via the VBlank loop.
+// Render callback — stable no-op while graphics state reverse engineering is pending.
+// Test results with different initializations:
+//   Zeros (0x00):         Frame 1 OK (skips), Frame 2+ DIVIDE_BY_ZERO (0xC0000094)
+//   Self-refs (addr):     ACCESS_VIOLATION (0xC0000005) — dereferences pointer chains
+//   Small values (1):     ACCESS_VIOLATION (0xC0000005) — same as self-refs
+// FIX: Analyze graphics state structure at 0x83830000 via IDA to determine
+// which offsets need 0 (null ptrs → skip) vs non-zero (counts/sizes → no div/0).
 void sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base) {
     static int n = 0;
     n++;
@@ -8380,7 +8385,6 @@ void sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base) {
         printf("[CALLBACK] sub_822D41E8 #%d r3=0x%08llX (no-op)\n", n, (unsigned long long)ctx.r3.u64);
         fflush(stdout);
     }
-    // Original function crashes with 0xC0000005 — uninitialized graphics state
 }
 
 // Diagnostic overrides REMOVED — let game init run naturally.
