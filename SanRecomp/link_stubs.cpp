@@ -234,68 +234,75 @@ void _sub_829D8860(void) {}
 
 // ---- PPC Kernel stubs ---------------------------------------------------
 // These are declared in ppc_recomp_shared.h with C linkage. Definitions here.
-void __imp__XamBackgroundDownloadGetMode(PPCContext&, uint8_t*) {}
-void __imp__XamBackgroundDownloadSetMode(PPCContext&, uint8_t*) {}
-void __imp__XamContentResolve(PPCContext&, uint8_t*) {}
-void __imp__XamMarketplaceAcquireFreeContent(PPCContext&, uint8_t*) {}
-void __imp__XamShowKeyboardUI(PPCContext&, uint8_t*) {}
-void __imp__XamShowMarketplaceUI(PPCContext&, uint8_t*) {}
-void __imp__XamShowMessageComposeUI(PPCContext&, uint8_t*) {}
-void __imp__XamShowFriendRequestUI(PPCContext&, uint8_t*) {}
-void __imp__XamShowMarketplaceDownloadItemsUI(PPCContext&, uint8_t*) {}
-void __imp__XamBackgroundDownloadItemGetStatus(PPCContext&, uint8_t*) {}
-void __imp__XamBackgroundDownloadItemGetHistoryStatus(PPCContext&, uint8_t*) {}
-void __imp__XamUserGetAge(PPCContext&, uint8_t*) {}
-void __imp__XamUserGetAgeGroup(PPCContext&, uint8_t*) {}
-void __imp__ExAllocatePool(PPCContext&, uint8_t*) {}
-void __imp__MmMapIoSpace(PPCContext&, uint8_t*) {}
-void __imp__NtWriteFileGather(PPCContext&, uint8_t*) {}
-void __imp__XAudioEnableDucker(PPCContext&, uint8_t*) {}
-void __imp__XAudioGetDuckerAttackTime(PPCContext&, uint8_t*) {}
-void __imp__XAudioGetDuckerHoldTime(PPCContext&, uint8_t*) {}
-void __imp__XAudioGetDuckerLevel(PPCContext&, uint8_t*) {}
-void __imp__XAudioGetDuckerReleaseTime(PPCContext&, uint8_t*) {}
-void __imp__XAudioGetDuckerThreshold(PPCContext&, uint8_t*) {}
-void __imp__XexLoadImage(PPCContext&, uint8_t*) {}
-void __imp__XexUnloadImage(PPCContext&, uint8_t*) {}
-void __imp__KeInitializeDpc(PPCContext&, uint8_t*) {}
-void __imp__KeInsertQueueDpc(PPCContext&, uint8_t*) {}
-void __imp__KeSetCurrentProcessType(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpCloseHandle(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpConnect(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpDoWork(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpOpen(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpOpenRequest(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpQueryHeaders(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpReadData(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpReceiveResponse(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpSendRequest(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpSetStatusCallback(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpShutdown(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpStartup(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XHttpWriteData(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XNetConnect(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XNetDnsLookup(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XNetDnsRelease(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XNetGetOpt(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XNetInAddrToServer(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XNetInAddrToXnAddr(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XNetRegisterKey(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XNetUnregisterKey(PPCContext&, uint8_t*) {}
-void __imp__NetDll_XnpLogonGetStatus(PPCContext&, uint8_t*) {}
-void __imp__NtYieldExecution(PPCContext&, uint8_t*) {}
-void __imp__VdSetDisplayModeOverride(PPCContext&, uint8_t*) {}
-void __imp__XamFreeToken(PPCContext&, uint8_t*) {}
-void __imp__XamGetLanguage(PPCContext&, uint8_t*) {}
-void __imp__XamGetToken(PPCContext&, uint8_t*) {}
-void __imp__XampXAuthGetTitleBuffer(PPCContext&, uint8_t*) {}
-void __imp__XampXAuthShutdown(PPCContext&, uint8_t*) {}
-void __imp__XampXAuthStartup(PPCContext&, uint8_t*) {}
-void __imp__XamSwapCancel(PPCContext&, uint8_t*) {}
-void __imp__XamSwapDisc(PPCContext&, uint8_t*) {}
-void __imp__XamUserGetDeviceContext(PPCContext&, uint8_t*) {}
-void __imp__XamUserGetMembershipTierFromXUID(PPCContext&, uint8_t*) {}
-void __imp__XamUserGetOnlineCountryFromXUID(PPCContext&, uint8_t*) {}
-void __imp__XamVoiceIsActiveProcess(PPCContext&, uint8_t*) {}
-void __imp__XNetLogonGetMachineID(PPCContext&, uint8_t*) {}
-void __imp__XNetLogonGetTitleID(PPCContext&, uint8_t*) {}
+// KERNEL_TRACE: comment to disable tracing
+#define KERNEL_TRACE
+#ifdef KERNEL_TRACE
+#define TRACE_CALL(name) printf("[KERNEL-STUB] %s called\n", name); fflush(stdout)
+#else
+#define TRACE_CALL(name) ((void)0)
+#endif
+void __imp__XamBackgroundDownloadGetMode(PPCContext&, uint8_t*) { TRACE_CALL("XamBackgroundDownloadGetMode"); }
+void __imp__XamBackgroundDownloadSetMode(PPCContext&, uint8_t*) { TRACE_CALL("XamBackgroundDownloadSetMode"); }
+void __imp__XamContentResolve(PPCContext&, uint8_t*) { TRACE_CALL("XamContentResolve"); }
+void __imp__XamMarketplaceAcquireFreeContent(PPCContext&, uint8_t*) { TRACE_CALL("XamMarketplaceAcquireFreeContent"); }
+void __imp__XamShowKeyboardUI(PPCContext&, uint8_t*) { TRACE_CALL("XamShowKeyboardUI"); }
+void __imp__XamShowMarketplaceUI(PPCContext&, uint8_t*) { TRACE_CALL("XamShowMarketplaceUI"); }
+void __imp__XamShowMessageComposeUI(PPCContext&, uint8_t*) { TRACE_CALL("XamShowMessageComposeUI"); }
+void __imp__XamShowFriendRequestUI(PPCContext&, uint8_t*) { TRACE_CALL("XamShowFriendRequestUI"); }
+void __imp__XamShowMarketplaceDownloadItemsUI(PPCContext&, uint8_t*) { TRACE_CALL("XamShowMarketplaceDownloadItemsUI"); }
+void __imp__XamBackgroundDownloadItemGetStatus(PPCContext&, uint8_t*) { TRACE_CALL("XamBackgroundDownloadItemGetStatus"); }
+void __imp__XamBackgroundDownloadItemGetHistoryStatus(PPCContext&, uint8_t*) { TRACE_CALL("XamBackgroundDownloadItemGetHistoryStatus"); }
+void __imp__XamUserGetAge(PPCContext&, uint8_t*) { TRACE_CALL("XamUserGetAge"); }
+void __imp__XamUserGetAgeGroup(PPCContext&, uint8_t*) { TRACE_CALL("XamUserGetAgeGroup"); }
+void __imp__ExAllocatePool(PPCContext&, uint8_t*) { TRACE_CALL("ExAllocatePool"); }
+void __imp__MmMapIoSpace(PPCContext&, uint8_t*) { TRACE_CALL("MmMapIoSpace"); }
+void __imp__NtWriteFileGather(PPCContext&, uint8_t*) { TRACE_CALL("NtWriteFileGather"); }
+void __imp__XAudioEnableDucker(PPCContext&, uint8_t*) { TRACE_CALL("XAudioEnableDucker"); }
+void __imp__XAudioGetDuckerAttackTime(PPCContext&, uint8_t*) { TRACE_CALL("XAudioGetDuckerAttackTime"); }
+void __imp__XAudioGetDuckerHoldTime(PPCContext&, uint8_t*) { TRACE_CALL("XAudioGetDuckerHoldTime"); }
+void __imp__XAudioGetDuckerLevel(PPCContext&, uint8_t*) { TRACE_CALL("XAudioGetDuckerLevel"); }
+void __imp__XAudioGetDuckerReleaseTime(PPCContext&, uint8_t*) { TRACE_CALL("XAudioGetDuckerReleaseTime"); }
+void __imp__XAudioGetDuckerThreshold(PPCContext&, uint8_t*) { TRACE_CALL("XAudioGetDuckerThreshold"); }
+void __imp__XexLoadImage(PPCContext&, uint8_t*) { TRACE_CALL("XexLoadImage"); }
+void __imp__XexUnloadImage(PPCContext&, uint8_t*) { TRACE_CALL("XexUnloadImage"); }
+void __imp__KeInitializeDpc(PPCContext&, uint8_t*) { TRACE_CALL("KeInitializeDpc"); }
+void __imp__KeInsertQueueDpc(PPCContext&, uint8_t*) { TRACE_CALL("KeInsertQueueDpc"); }
+void __imp__KeSetCurrentProcessType(PPCContext&, uint8_t*) { TRACE_CALL("KeSetCurrentProcessType"); }
+void __imp__NetDll_XHttpCloseHandle(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpCloseHandle"); }
+void __imp__NetDll_XHttpConnect(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpConnect"); }
+void __imp__NetDll_XHttpDoWork(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpDoWork"); }
+void __imp__NetDll_XHttpOpen(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpOpen"); }
+void __imp__NetDll_XHttpOpenRequest(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpOpenRequest"); }
+void __imp__NetDll_XHttpQueryHeaders(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpQueryHeaders"); }
+void __imp__NetDll_XHttpReadData(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpReadData"); }
+void __imp__NetDll_XHttpReceiveResponse(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpReceiveResponse"); }
+void __imp__NetDll_XHttpSendRequest(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpSendRequest"); }
+void __imp__NetDll_XHttpSetStatusCallback(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpSetStatusCallback"); }
+void __imp__NetDll_XHttpShutdown(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpShutdown"); }
+void __imp__NetDll_XHttpStartup(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpStartup"); }
+void __imp__NetDll_XHttpWriteData(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XHttpWriteData"); }
+void __imp__NetDll_XNetConnect(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XNetConnect"); }
+void __imp__NetDll_XNetDnsLookup(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XNetDnsLookup"); }
+void __imp__NetDll_XNetDnsRelease(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XNetDnsRelease"); }
+void __imp__NetDll_XNetGetOpt(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XNetGetOpt"); }
+void __imp__NetDll_XNetInAddrToServer(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XNetInAddrToServer"); }
+void __imp__NetDll_XNetInAddrToXnAddr(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XNetInAddrToXnAddr"); }
+void __imp__NetDll_XNetRegisterKey(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XNetRegisterKey"); }
+void __imp__NetDll_XNetUnregisterKey(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XNetUnregisterKey"); }
+void __imp__NetDll_XnpLogonGetStatus(PPCContext&, uint8_t*) { TRACE_CALL("NetDll_XnpLogonGetStatus"); }
+void __imp__NtYieldExecution(PPCContext&, uint8_t*) { TRACE_CALL("NtYieldExecution"); }
+void __imp__VdSetDisplayModeOverride(PPCContext&, uint8_t*) { TRACE_CALL("VdSetDisplayModeOverride"); }
+void __imp__XamFreeToken(PPCContext&, uint8_t*) { TRACE_CALL("XamFreeToken"); }
+void __imp__XamGetLanguage(PPCContext&, uint8_t*) { TRACE_CALL("XamGetLanguage"); }
+void __imp__XamGetToken(PPCContext&, uint8_t*) { TRACE_CALL("XamGetToken"); }
+void __imp__XampXAuthGetTitleBuffer(PPCContext&, uint8_t*) { TRACE_CALL("XampXAuthGetTitleBuffer"); }
+void __imp__XampXAuthShutdown(PPCContext&, uint8_t*) { TRACE_CALL("XampXAuthShutdown"); }
+void __imp__XampXAuthStartup(PPCContext&, uint8_t*) { TRACE_CALL("XampXAuthStartup"); }
+void __imp__XamSwapCancel(PPCContext&, uint8_t*) { TRACE_CALL("XamSwapCancel"); }
+void __imp__XamSwapDisc(PPCContext&, uint8_t*) { TRACE_CALL("XamSwapDisc"); }
+void __imp__XamUserGetDeviceContext(PPCContext&, uint8_t*) { TRACE_CALL("XamUserGetDeviceContext"); }
+void __imp__XamUserGetMembershipTierFromXUID(PPCContext&, uint8_t*) { TRACE_CALL("XamUserGetMembershipTierFromXUID"); }
+void __imp__XamUserGetOnlineCountryFromXUID(PPCContext&, uint8_t*) { TRACE_CALL("XamUserGetOnlineCountryFromXUID"); }
+void __imp__XamVoiceIsActiveProcess(PPCContext&, uint8_t*) { TRACE_CALL("XamVoiceIsActiveProcess"); }
+void __imp__XNetLogonGetMachineID(PPCContext&, uint8_t*) { TRACE_CALL("XNetLogonGetMachineID"); }
+void __imp__XNetLogonGetTitleID(PPCContext&, uint8_t*) { TRACE_CALL("XNetLogonGetTitleID"); }

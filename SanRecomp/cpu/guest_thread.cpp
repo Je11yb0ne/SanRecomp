@@ -268,12 +268,37 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
     
     printf("[GuestThread] Calling function...\n");
     fflush(stdout);
-    
+
+    // Watchdog thread — prints heartbeat with r1/r3 register values to see progress
+    std::atomic<bool> ppcRunning{true};
+    std::thread watchdog([&ppcRunning, &ctx]() {
+        uint32_t tick = 0;
+        uint32_t lastR1 = 0;
+        while (ppcRunning.load()) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (ppcRunning.load()) {
+                tick++;
+                uint32_t currentR1 = ctx.ppcContext.r1.u32;
+                uint32_t currentR3 = ctx.ppcContext.r3.u32;
+                bool r1Changed = (currentR1 != lastR1);
+                printf("[PPC-Watchdog] tick=%u r1=0x%08X r3=0x%08X %s\n",
+                    tick, currentR1, currentR3,
+                    r1Changed ? "(stack moving)" : "(STACK STATIC - may be stuck)");
+                fflush(stdout);
+                lastR1 = currentR1;
+            }
+        }
+    });
+
     func(ctx.ppcContext, g_memory.base);
+
+    ppcRunning.store(false);
+    if (watchdog.joinable())
+        watchdog.join();
 
     printf("[GuestThread] Guest code returned\n");
     fflush(stdout);
-    
+
     return ctx.ppcContext.r3.u32;
 }
 

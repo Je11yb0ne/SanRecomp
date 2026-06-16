@@ -24,7 +24,7 @@ Then at every step:
 
 SanRecomp is a static recompilation project porting GTA V (Xbox 360) to PC. It's a fork of LibertyRecomp (GTA IV port) in active migration. The codebase is C++20, built with Clang-cl + Ninja + vcpkg on Windows.
 
-**Current Phase: 4 — Rendering Pipeline + Game Boot.** SanRecomp.exe compiles, links (0 errors), and runs. D3D12 device + swap chain created. SDL window shows "San Recompiled" title. PPC code boots via GuestThread::Start (entry=0x83639888). **Blocker:** Full D3D12 pipeline (shaders, ImGui rendering) disabled on Intel GPU — window is pure black.
+**Current Phase: 4 — Rendering Pipeline + Game Boot.** SanRecomp.exe compiles, links (0 errors), and runs. D3D12 device + swap chain work. **Minimal clear+present shows purple window.** PPC code boots via GuestThread::Start (entry=0x83639888) but hangs in a tight loop — no kernel stubs called, stack static. **Blocker:** PPC code busy-waits on unknown condition (疑似等待 Xbox 360 硬件寄存器).
 
 ## Build Commands
 
@@ -91,6 +91,10 @@ SanRecomp.exe (kernel emulation + renderer + audio + input)
 | `thirdparty/plume/` | Cross-platform GPU abstraction (D3D12, Vulkan, Metal) | ✅ Built as static lib |
 | `thirdparty/SDL/` | SDL2 static lib | ✅ Built (release-2.30.9) |
 | `thirdparty/imgui/` | Dear ImGui | ✅ v1.90.9 (detached) |
+| `refs/` | 参考项目 (UnleashedRecomp, rexglue-sdk, etc.) | ✅ 已下载并研究 |
+| `refs/rexglue-sdk/rexglue-bin/` | rexglue-sdk v0.8.0 预编译工具 | ✅ Windows 版本可用 |
+| `refs/UnleashedRecomp/` | Sonic Unleashed 重编译参考（hedge-dev） | ✅ 完整工作项目 |
+| `refs/rexglue-sdk/` | rexglue-sdk 源码 | ✅ v0.8.0, C++23 |
 
 ## Submodule Versions (Critical)
 
@@ -133,17 +137,22 @@ Only these source files remain disabled in `SanRecomp/CMakeLists.txt`:
 
 ## Known Workarounds (Active)
 
-These are NOT fixes — they're temporary bypasses that need proper solutions:
-
-1. **o1heap → malloc** (`kernel/heap.cpp`): o1heapAllocate crashes with access violation on 2GB physical heap. `AllocPhysical` uses `malloc()` instead. Lost benefit of deterministic allocation.
-2. **D3D12 pipeline #if 0** (`gpu/video.cpp:2292-2542`): Full pipeline setup (shaders, ImGui, render passes) wrapped in `#if 0` because Intel D3D12 driver crashes in `getSampleCountsSupported`, `createCommandQueue(COPY)`, and pipeline creation.
-3. **InstallerWizard early return** (`ui/installer_wizard.cpp`): `InstallerWizard::Run` returns `true` immediately without rendering UI (pipeline not ready).
+1. **o1heap → malloc** (`kernel/heap.cpp`): o1heapAllocate crashes on 2GB physical heap. `AllocPhysical` uses `malloc()`. 失去确定性分配优势。
+2. **D3D12 pipeline #if 0** (`gpu/video.cpp`): 完整管线（shaders, ImGui）被 `#if 0` 包裹。Intel D3D12 驱动在 `SetDescriptorHeaps`/`SetGraphicsRootDescriptorTable` 崩溃。
+3. **InstallerWizard early return** (`ui/installer_wizard.cpp`): 立即返回 `true`，不渲染 UI。
+4. **最小渲染模式** (`gpu/video.cpp`): `BeginCommandList` 在 `g_pipelineLayout==null` 时跳过 descriptor 绑定 + 直接渲染到 swap chain backbuffer（跳过中介纹理），避免 Intel D3D12 崩溃。
+5. **PPC 看门狗** (`cpu/guest_thread.cpp`): 每秒打印 r1/r3 寄存器值，带 `#include <thread>` + `<atomic>`。
 
 ## Current Blockers (Phase 4)
 
-1. **Intel D3D12 pipeline crashes** — Root cause: Intel GPU driver issues with specific D3D12 API calls. Need to isolate which calls crash and find alternatives or fallbacks.
-2. **Black window** — Window exists but no content rendered because full pipeline is skipped. Need minimal clear+present to prove rendering works.
-3. **PPC code hangs** — PPC code executes but eventually hangs (exit 124 = timeout). Need printf-based tracing to see where it gets stuck.
+1. **PPC 代码忙等** — 入口 0x83639888 可执行但不调用任何内核 stub。看门狗显示 r1 静态（卡在单个函数内），疑似在忙等 Xbox 360 硬件寄存器。rexglue 分析发现 GTA V 有 **310 个导入符号**，我们的项目只 stubbed ~50 个。
+2. **Intel D3D12 管线** — 最小 clear+present 已工作 ✅。完整管线需要 descriptor heap 绑定 → 驱动崩溃。
+
+## 诊断工具
+
+- **PPC 看门狗**: `guest_thread.cpp` 中自动打印 r1/r3 寄存器（每秒）。`r1 变化` = 函数调用活跃；`r1 静态` = 卡在单个函数内。
+- **内核调用追踪**: `link_stubs.cpp` 中 `#define KERNEL_TRACE` 启用/禁用所有 `__imp__*` stub 的 printf 追踪。
+- **rexglue 分析**: `refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe init/codegen` 可重新分析 XEX，找到完整导入表。
 
 ## Known Fixes Applied
 
@@ -191,11 +200,30 @@ This file provides stubs for libraries not yet built. Current stub categories:
 - **PlayerLimitPatches::Init**: Empty stub
 - **_sub_829D1758, _sub_829D8860**: GTA V PPC function stubs
 
+## rexglue-sdk (Alternative Recompiler)
+
+rexglue-sdk v0.8.0 is a newer recompilation framework (C++23, clang, Ninja). Pre-built binary at `refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe`.
+
+```bash
+# Initialize project from XEX
+REXGLUE="refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe"
+"$REXGLUE" init --project-name "GTA5" --xex-path "path/to/default.xex" --game-root "path/to/game"
+
+# Generate recompiled code (SLOW - 5.6M instructions)
+"$REXGLUE" codegen manifest.toml -v
+```
+
+Key differences from XenonRecomp:
+- Finds 310 import symbols (vs our ~50 stubs)
+- 10,728 code regions (vs ~546 files)
+- Built-in runtime (rex::Runtime, D3D12/Vulkan, audio, input)
+- No game_init.cpp needed — PPC code runs directly
+
 ## Next Session Starting Points
 
-1. **Minimal D3D12 clear+present** — Add a simple clear color + Present() before the #if 0 block to prove rendering works and show something other than black
-2. **Isolate Intel D3D12 crash** — Test individual pipeline creation calls with SEH to find which specific call crashes
-3. **PPC execution tracing** — Add printf in GuestThread::Start loop to see what PPC code does and where it hangs
-4. **Build SDL_mixer** — Configure SDL_mixer cmake build to remove stubs
-5. **Run XenosRecomp** — Convert Xbox 360 .fxc shaders to DXIL for real shader pipeline
-6. **Fix imgui_font_builder.cpp** — Generate msdfgen-config.h via cmake
+1. **完成 rexglue codegen** — 让 rexglue 完整生成 GTA V 重编译代码，对比分析差异
+2. **补全 310 个导入符号** — 根据 rexglue 发现的导入表或 IDA 分析，补全缺失的 ~260 个 kernel stubs
+3. **PPC 忙等定位** — 用 IDA 反编译入口点 0x83639888，找到 busy-wait 的内存地址，在 Host 端伪造值
+4. **对比 UnleashedRecomp 架构** — 参考其无 game_init.cpp 模式，评估是否移除 host 端初始化干预
+5. **Build SDL_mixer** — 配置 SDL_mixer cmake 构建，移除 stubs
+6. **Run XenosRecomp** — 转换 Xbox 360 .fxc shaders 到 DXIL
