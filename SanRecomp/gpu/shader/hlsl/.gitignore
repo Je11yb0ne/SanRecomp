@@ -1,1 +1,3 @@
-*.hlsl.*.h
+*.hlsl.dxil.h
+*.hlsl.metallib.h
+# spirv.h files are tracked (needed for Vulkan builds)
