@@ -2047,7 +2047,7 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
     printf("[Video] GameWindow::Init done, selecting backend...\n"); fflush(stdout);
 
 #if defined(SAN_RECOMP_D3D12)
-    g_backend = (DetectWine() || Config::GraphicsAPI == EGraphicsAPI::Vulkan) ? Backend::VULKAN : Backend::D3D12;
+    g_backend = Backend::VULKAN; // Vulkan-only mode
 #elif defined(SAN_RECOMP_METAL)
     g_backend = Config::GraphicsAPI == EGraphicsAPI::Vulkan ? Backend::VULKAN : Backend::METAL;
 #endif

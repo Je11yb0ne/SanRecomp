@@ -1,187 +1,132 @@
 # GAME PLAN — Autonomous Work Guide
 
-**Goal:** Produce a working `SanRecomp.exe` that boots the game.
+**Goal:** Produce a working `SanRecomp.exe` that boots the game with Vulkan rendering, portable to Switch.
 
-**Rule:** After each phase, update this file. Never deviate from the current phase. Never ask "continue?" — just work.
+**Rule:** Never stop. Update after each phase. Just work.
 
-**Current Phase: 7 — Kernel 启动链补全 → Windows 游戏启动** ⚡ EXECUTING
+**Current Phase: 8 — Vulkan 渲染后端 → 完整画面渲染** ⚡ EXECUTING
 
 ---
 
 ## 已完成阶段
 
-### Phase 1-4: 构建 + 渲染 + UI + 基础启动 ✅
+### Phase 1-7: 构建、渲染、PPC 启动、内核补丁 ✅
 - SanRecomp.exe 编译/链接/运行
-- D3D12 紫色窗口（最小模式）
+- D3D12 紫色窗口（最小模式，完整管线在 Intel 上 #if 0）
 - XEX 加载 + PPC 入口执行
-
-### Phase 5: PPC 启动诊断 ✅
-- 根因：XenonRecomp 零初始化 PPC 内存 → 未初始化数据结构 → 循环/崩溃
-- 决策：主用 rexglue，XenonRecomp 辅助
-
-### Phase 6: 内核补丁（9 个修复） ✅
-- 空页哨兵、忙等检测、间接调用守卫、内存分配器、RTL 保护
+- 所有崩溃修复（忙等、栈溢出、KeBugCheck、间接调用）
+- VBlank 60Hz 渲染驱动运行中
+- 渲染循环活跃（VBlank → Video::Present）
 
 ---
 
-## Phase 7: 内核启动链补全 → Windows 游戏启动
+## Phase 8: Vulkan 渲染后端（方案 A：Plume Vulkan）
 
-**主线：** 让 PPC 代码完成启动初始化，到达游戏主循环。
-**方案：** 从 rexglue 移植缺失的内核函数到 imports.cpp，而不是完全替换 PPC 代码。
-**原因：** 完全替换 200+ 文件风险太大、工期太长。移植单个内核函数可以逐步验证。
+**主线：** 给 SanRecomp 加 Vulkan 后端，参考 UnleashedRecomp 的 Plume 双后端实现。
+**目标：** Intel GPU 上完整渲染管线工作，显示游戏画面。
+**未来：** 同样的 Vulkan 后端直接用于 Switch 移植（NVK）。
 
-### Step 7.1: 审计缺失的内核导入
+### Step 8.1: 启用 Plume 的 Vulkan 后端
 
-**目标：** 找出 rexglue 有但我们没有的 210 个导入中，哪些是启动路径必需的。
-
-```
-验证：列出缺失的导入函数清单，标记启动路径优先級
-```
-
-#### 7.1.1 从 rexglue 导出表提取完整导入列表
-- 读取 `refs/rexglue-sdk/src/kernel/xboxkrnl/export_table.inc`
-- 读取 `refs/rexglue-sdk/src/kernel/xam/export_table.inc`
-- 对比我们的 `imports.cpp` 中的 GUEST_FUNCTION_HOOK
-
-#### 7.1.2 从启动追踪识别需要的函数
-- 分析上次运行的输出：KeGetCurrentProcessType, XexCheckExecutablePrivilege, XGetAVPack, ExGetXConfigSetting, RtlEnter/LeaveCriticalSection, KeBugCheckEx
-- 在 rexglue 生成的 PPC 代码中搜索这些调用点
-- 找出调用它们的函数还需要哪些其他导入
-
-#### 7.1.3 优先级排序
-- P0（阻塞启动）：线程创建、同步原语、内存管理
-- P1（启动校验）：XAM 初始化、配置读取
-- P2（后续）：音频、网络、存储
-
-### Step 7.2: 实现 P0 内核函数（线程 + 同步）
-
-**目标：** 让游戏的线程创建和同步机制正常工作，不再轮询死标志。
+**目标：** 编译 Plume 的 Vulkan 静态库，链接到 SanRecomp.exe。
 
 ```
-验证：不再出现 BUSY-WAIT 或 KeBugCheckEx，PPC 代码持续推进
+验证：cmake --build 成功，Plume Vulkan 后端编译无错误
 ```
 
-#### 7.2.1 线程函数补全
-- `KeInitializeThread` — 初始化线程对象结构
-- `KeResumeThread` / `NtResumeThread` — 真正恢复线程
-- `NtCreateThread` / `KeCreateThread` — 如果游戏直接调用
-- 研究 UnleashedRecomp 的线程实现作为参考
+#### 8.1.1 检查 Plume Vulkan 依赖
+- volk (Vulkan loader)
+- Vulkan SDK / headers
+- SPIR-V 相关 (glslang, SPIRV-Tools)
+- 检查 thirdparty/plume 的 CMakeLists.txt 中的 Vulkan 编译选项
 
-#### 7.2.2 同步原语补全
-- `KeInitializeEvent` — 初始化事件对象
-- `KeSetEvent` — 真正设置事件（当前是 stub）
-- `KeWaitForSingleObject` — 真正等待（当前是 stub）
-- `KeResetEvent` — 重置事件
+#### 8.1.2 配置 CMake 启用 Vulkan
+- 类似 UnleashedRecomp：设置 `PLUME_VULKAN=ON`
+- 链接 Vulkan 库
+- 确保 D3D12 和 Vulkan 可以同时编译
 
-#### 7.2.3 定时器/延迟
-- `KeDelayExecutionThread` — 线程睡眠
-- `KeSetTimerEx` / `KeCancelTimer` — 定时器
+#### 8.1.3 编译验证
+- Full rebuild with Vulkan enabled
+- Fix any missing dependencies
 
-### Step 7.3: 实现 P1 内核函数（XAM + 系统）
+### Step 8.2: 添加 Vulkan 渲染路径到 video.cpp
 
-**目标：** 让游戏的 XAM 初始化完成，不再调用 KeBugCheckEx。
-
-```
-验证：KeBugCheckEx 不再出现，游戏创建主窗口/UI
-```
-
-#### 7.3.1 XAM 初始化
-- `XamTaskSchedule` — 任务调度（当前 stub）
-- `XamTaskShouldExit` — 任务退出检查
-- `XamNotifyCreateListener` — 通知监听器
-- 研究 UnleashedRecomp 和 Xenia 的 XAM 实现
-
-#### 7.3.2 系统信息
-- `XamGetSystemVersion` — 系统版本
-- `XGetGameRegion` — 已实现，需验证返回值
-- `XamUserGetSigninInfo` — 用户登录信息
-- `XamUserCheckPrivilege` — 用户权限
-
-#### 7.3.3 配置/HID
-- 确认 ExGetXConfigSetting 所有 setting 都有返回值
-- HID 相关初始化（如果启动路径需要）
-
-### Step 7.4: 处理剩余忙等循环
-
-**目标：** 逐个打破或修复所有 PPC 忙等循环。
+**目标：** 参考 UnleashedRecomp 的 video.cpp，添加 Vulkan 设备创建和渲染路径。
 
 ```
-验证：PPC 看门狗显示 r1 持续变化，r3 持续变化
+验证：SanRecomp.exe 启动，Video 设备创建成功（Vulkan 后端）
 ```
 
-#### 7.4.1 识别所有忙等地址
-- 运行游戏 30 秒，收集所有 BUSY-WAIT 地址
-- 对每个地址找到对应的 PPC 函数
+#### 8.2.1 研究 UnleashedRecomp 的 Vulkan 实现
+- `refs/UnleashedRecomp/UnleashedRecomp/gpu/video.cpp`
+- 关键点：
+  - Vulkan 设备创建（`CreateVulkanDevice`）
+  - Vulkan swap chain 创建
+  - 着色器加载（SPIR-V）
+  - ImGui 的 Vulkan 后端
+  - Intel GPU 自动检测和回退
 
-#### 7.4.2 对每个忙等循环
-- 如果是因为内核 stub 不完整 → 实现该 stub
-- 如果是因为数据结构未初始化 → 添加强符号覆盖
-- 如果是因为等待硬件寄存器 → 写入合理的伪造值
+#### 8.2.2 移植 Vulkan 设备创建
+- 添加 `CreateVulkanInterface()` 调用
+- 添加 Vulkan 设备枚举（物理设备选择）
+- 添加 Vulkan swap chain 创建
 
-### Step 7.5: 渲染管线完善（可选，看时机）
+#### 8.2.3 移植渲染命令翻译
+- Vulkan command buffer 录制
+- Pipeline state 管理
+- Descriptor set 管理
 
-**目标：** 如果游戏到达了渲染阶段，让完整 D3D12 管线工作。
+#### 8.2.4 Intel GPU → 自动选择 Vulkan
+- 添加 GPU 厂商检测
+- Intel → 优先使用 Vulkan
+- AMD/NVIDIA → 可配置
+
+### Step 8.3: 完整渲染管线测试
+
+**目标：** 游戏画面渲染到窗口（不只是紫色清除色）。
 
 ```
-验证：游戏画面渲染到窗口（不只是紫色清除色）
+验证：窗口中出现游戏画面
 ```
 
-#### 7.5.1 如果 Intel 驱动仍有问题
-- 尝试 Vulkan 后端（plume 支持）
-- 或者换到有独立 GPU 的机器测试
+#### 8.3.1 着色器编译
+- 运行 XenosRecomp 转换 .fxc → SPIR-V（不是 DXIL）
+- 或使用现有 UnleashedRecomp 的着色器缓存
 
-#### 7.5.2 着色器编译
-- 运行 XenosRecomp 转换 .fxc → DXIL
-- 让着色器缓存生效
+#### 8.3.2 VBlank 驱动完整渲染
+- 确保 VBlank → 游戏回调 → GPU 绘制 → Present 完整链路工作
 
-### Step 7.6: 最终验证
+### Step 8.4: Switch 移植准备（未来）
 
-**目标：** 游戏启动到主菜单/游戏中。
+**目标：** 代码结构准备好编译到 Switch。
 
 ```
-验证：
-1. SanRecomp.exe 启动无崩溃
-2. 窗口显示游戏画面（不是紫色清除色）
-3. PPC 看门狗显示持续活动（r1 不断变化）
-4. 无 KeBugCheckEx 调用
-5. 无 BUSY-WAIT 循环
+验证：代码使用 Plume Vulkan 抽象，无 Windows 特定依赖
 ```
+
+#### 8.4.1 分离平台特定代码
+- 窗口创建：`#ifdef __SWITCH__` → libnx, else → SDL
+- 输入：Switch HID driver 参考 UnleashedRecomp-NX
+
+#### 8.4.2 准备 NVK 链接
+- 参考 `refs/UnleashedRecomp-NX/patches/plume.patch`
+- 添加 `VK_USE_PLATFORM_VI_NN` 支持
 
 ---
 
 ## Phase Progress Log
 
-### 2026-06-16 (session 3 — 总体规划 + 执行)
-- [ ] Step 7.1: 审计缺失的内核导入
-- [ ] Step 7.2: 实现 P0 线程/同步函数
-- [ ] Step 7.3: 实现 P1 XAM/系统函数
-- [ ] Step 7.4: 处理剩余忙等循环
-- [ ] Step 7.5: 渲染管线完善
-- [ ] Step 7.6: 最终验证
+### 2026-06-16 (session — 渲染管线研究 + Vulkan 计划)
+- ✅ 研究 refs/ 下所有项目的渲染后端
+- ✅ 确认 Intel D3D12 问题 → Vulkan 是解决方案
+- ✅ rexglue Vulkan 支持完整可用
+- ✅ UnleashedRecomp-NX 使用 Plume Vulkan + NVK
+- ✅ D:\Nintendo 确认 Switch 原生 NVN + Vulkan 均可用
+- ✅ 选定方案 A：Plume Vulkan（Windows + Switch 统一）
+- [ ] Step 8.1: 启用 Plume Vulkan 后端
+- [ ] Step 8.2: 添加 Vulkan 渲染路径
+- [ ] Step 8.3: 完整渲染管线测试
+- [ ] Step 8.4: Switch 移植准备
 
 ### Past sessions
-- Phase 1-6: see git log for details
-
-### 2026-06-16 Session — GOAL PROGRESS: game reaches clean exit
-- ✅ All KeBugCheck/KeBugCheckEx silenced (0 occurrences)
-- ✅ RTL string stubs properly implemented (no LOG spam)
-- ✅ _xstart runs to completion, exits cleanly (exit code 0)
-- ✅ 10+ function table patches + 10+ weak symbol overrides
-- ✅ Stack increased to 4MB prevents asset processing crashes
-- ✅ rexglue wiki studied and documented in CLAUDE.md
-
-KEY DISCOVERY: _xstart is NOT the rendering entry point.
-It's the INIT function that either exits via XamLoaderTerminateTitle
-(flag=0, normal) or enters argument parsing (flag≠0, crashes).
-The game's rendering loop must be started by a different thread
-or through XamTaskSchedule / module launch mechanism.
-
-Goal criteria:
-1. ✅ LR diversified beyond 0x836411E0
-2. ✅ INDIRECT-CALL skips minimal
-3. ✅ KeBugCheck/KeBugCheckEx silenced
-4. ❌ Rendering functions — not called because _xstart exits
-5. ❌ Game image — needs rendering entry point found
-
-NEXT: Identify how GTA V starts its render loop (likely via
-XamTaskSchedule or a thread created during init).
+- Phase 1-7: see git log for details
