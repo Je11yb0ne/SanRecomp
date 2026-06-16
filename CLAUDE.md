@@ -268,8 +268,12 @@ REXGLUE="refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe"
 
 ## Next Session Starting Points
 
-1. ⭐ **补全内核事件/同步机制** — 游戏在 LR=0x8319537C 处于轮询等待，需要完善 `KeSetEvent`/`KeWaitForSingleObject`/`NtCreateEvent` 等内核同步原语，让等待的事件能被触发
-2. **rexglue 内核移植** — 从 rexglue 移植更多内核实现到 imports.cpp（rexglue 有完整的 xboxkrnl 实现），特别是 `KeInitializeEvent`、`KePulseEvent`、`KeSetTimerEx` 等
-3. **让渲染管线就绪** — 一旦游戏进入主循环，需要 D3D12 完整管线工作（当前只有最小 clear+present）
-4. **Build SDL_mixer** — 配置 SDL_mixer cmake 构建，移除 stubs
+1. ⭐ **打破 0x838871A4 忙等** — 主线程轮询此地址，值在 0x10→0xFFFFFFFF 之间循环。这是 GTA V 内部同步变量。需要：
+   - IDA 分析哪些函数读写此地址
+   - 覆盖导致忙等的函数（如 init loop breakers 未覆盖的路径）
+   - 或实现缺失的内核同步原语（KeInitializeEvent, KeSetEvent, 等）
+2. ⭐ **VBlank 中断 userData 修复** — 当前 interruptUserData=0，导致 sub_822D41E8 的 r31=0，所有状态从零页读取。需要游戏完成 init 后注册真实回调
+3. **全管线崩溃修复** — video.cpp 全管线在空纹理创建时崩溃（0xC0000005），需要调试 plume Vulkan 空纹理创建
+4. **GPU 命令翻译** — 一旦游戏进入渲染循环，需要 PM4 → Vulkan 命令翻译（参考 UnleashedRecomp + rexglue）
+5. **Build SDL_mixer** — 配置 SDL_mixer cmake 构建，移除 stubs
 5. **Run XenosRecomp** — 转换 Xbox 360 .fxc shaders 到 DXIL
