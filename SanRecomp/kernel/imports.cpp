@@ -4704,8 +4704,7 @@ static std::thread g_vblankThread;
 void FireVBlankCallback() {
     if (g_gpuRingBuffer.interruptCallback != 0) {
         // Create a temporary context to call the guest callback
-        PPCContext ctx{};
-        ctx.r3.u32 = g_gpuRingBuffer.interruptUserData;
+        PPCContext ctx{}; ctx.r1.u64=0x10000000; /* temp stack */ ctx.r13.u64=0x82000000; /* TLS base */ ctx.r3.u32=g_gpuRingBuffer.interruptUserData;
         ctx.r4.u32 = 0;  // Interrupt type 0 = VBlank
         
         auto* callbackFunc = g_memory.FindFunction(g_gpuRingBuffer.interruptCallback);
