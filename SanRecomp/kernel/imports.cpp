@@ -4396,7 +4396,7 @@ void VdGetSystemCommandBuffer()
     static uint32_t s_ringBuffer = 0;
     static bool s_logged = false;
     if (!s_ringBuffer) {
-        s_ringBuffer = 0x84000000;  // 32MB past PPC base, past XEX image
+        s_ringBuffer = 0x83000000;  // 16MB past PPC base, within allocated range
         memset(g_memory.base + s_ringBuffer, 0, 0x100000);  // 1MB ring buffer
         g_gpuRingBuffer.ringBufferBase = s_ringBuffer;
         g_gpuRingBuffer.ringBufferSize = 0x100000;
@@ -4758,6 +4758,19 @@ void FireVBlankCallback() {
             if (vblankSwapCount <= 5 || vblankSwapCount % 60 == 0) {
                 printf("[VBlank] PrepareAndPresent (#%d)\n", vblankSwapCount);
                 fflush(stdout);
+
+                // Scan ring buffer for PM4 activity (diagnostic)
+                if (g_gpuRingBuffer.initialized && g_gpuRingBuffer.ringBufferBase != 0) {
+                    uint32_t* rb = (uint32_t*)(g_memory.base + g_gpuRingBuffer.ringBufferBase);
+                    uint32_t firstWords[8];
+                    for (int i = 0; i < 8; i++) {
+                        firstWords[i] = __builtin_bswap32(rb[i]);
+                    }
+                    printf("[RingBuf] First 8 dwords: %08X %08X %08X %08X %08X %08X %08X %08X\n",
+                        firstWords[0], firstWords[1], firstWords[2], firstWords[3],
+                        firstWords[4], firstWords[5], firstWords[6], firstWords[7]);
+                    fflush(stdout);
+                }
             }
             Video::PrepareFrameAndPresent();
         } else if (fireCount <= 3) {
@@ -4811,6 +4824,16 @@ static void InitVBlankPCR() {
 void StartVBlankTimer() {
     if (!g_vblankTimerRunning.load()) {
         InitVBlankPCR();
+        // Initialize GPU ring buffer for PM4 command processing
+        if (!g_gpuRingBuffer.initialized) {
+            // Use address in zeroed PPC data region (safe: 16MB past base = < 18MB zeroed)
+            g_gpuRingBuffer.ringBufferBase = 0x83000000;
+            g_gpuRingBuffer.ringBufferSize = 0x100000; // 1MB
+            g_gpuRingBuffer.initialized = true;
+            memset(g_memory.base + g_gpuRingBuffer.ringBufferBase, 0, g_gpuRingBuffer.ringBufferSize);
+            printf("[StartVBlankTimer] Initialized 1MB ring buffer at 0x%08X\n", g_gpuRingBuffer.ringBufferBase);
+            fflush(stdout);
+        }
         g_vblankTimerRunning.store(true);
         g_vblankThread = std::thread(VBlankTimerThread);
         printf("[VBlank] Timer started (60Hz)\n");

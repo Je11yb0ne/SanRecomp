@@ -76,8 +76,8 @@ static inline uint32_t _ppc_busywait_load32(uint8_t* base, uint32_t addr) {
             // For other addrs, write 1 (like a flag becoming ready).
             // Rotate break values: 0x00, 0xFF, 0x10, 0x01, 0x20, 0x02...
             static uint32_t s_break_seq = 0;
-            const uint32_t break_vals[] = {0}; // Always write 0x00 (signaled/done)
-            uint32_t break_val = break_vals[0]; // Always 0x00
+            const uint32_t break_vals[] = {0, 0xFF, 0x10, 0x01, 0x20, 0x02, 0x40, 0x04, 0x80, 0x08, 0xDEADBEEF, 0xFFFFFFFF};
+            uint32_t break_val = break_vals[s_break_seq % 12];
             s_break_seq++;
             uint32_t write_val = addr ? break_val : 0x10;
             *(volatile uint32_t*)(base + addr) = __builtin_bswap32(write_val);
