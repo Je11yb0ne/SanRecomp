@@ -8165,3 +8165,19 @@ PPC_FUNC(RenderTriggerStub) {
 // =============================================================================
 // =============================================================================
 // =============================================================================
+
+// Table patch for sub_83625C50 — KeBugCheck caller
+extern "C" void sub_83625C50_patch(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83625C50 bypassed\n",n);
+    ctx.r3.s64 = 0;
+}
+void sub_83625C50(PPCContext& __restrict ctx, uint8_t* base) { static int n=0; if(++n<=3) printf("[PATCH] sub_83625C50 #%d\n",n); ctx.r3.s64=0; }
+void sub_83625D78(PPCContext& __restrict ctx, uint8_t* base) { static int n=0; if(++n<=3) printf("[PATCH] sub_83625D78 #%d\n",n); ctx.r3.s64=0; }
+void sub_836405A8(PPCContext& __restrict ctx, uint8_t* base) { static int n=0; if(++n<=3) printf("[PATCH] sub_836405A8 #%d\n",n); ctx.r3.s64=0; }
+void sub_836408A0(PPCContext& __restrict ctx, uint8_t* base) { static int n=0; if(++n<=3) printf("[PATCH] sub_836408A0 #%d\n",n); ctx.r3.s64=0; }
+
+extern "C" void sub_836408A0_patch(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[TABLE-PATCH] sub_836408A0 #%d bypassed\n",n);
+    ctx.r3.s64 = 0;
+}
+void sub_8362A5F0(PPCContext& __restrict ctx, uint8_t* base) { static int n=0; if(++n<=3) printf("[PATCH] sub_8362A5F0 (init) #%d\n",n); }
