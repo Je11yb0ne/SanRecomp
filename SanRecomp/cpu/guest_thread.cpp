@@ -144,6 +144,7 @@ static void* GuestThreadFunc(GuestThreadHandle* hThread)
     } else {
         fprintf(stderr, "[GuestThreadFunc] Thread NOT suspended, running immediately\n");
     }
+    fprintf(stderr, "[GuestThreadFunc] Starting thread with function=0x%08X\n", hThread->params.function);
     GuestThread::Start(hThread->params);
     // HACK(1)
     hThread->isFinished = true;
@@ -303,6 +304,7 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
     });
 
     ScopedCrashGuard crashGuard;
+    ScopedCrashGuard::s_base = g_memory.base;  // for execute-fault recovery
     func(ctx.ppcContext, g_memory.base);
 
     ppcRunning.store(false);

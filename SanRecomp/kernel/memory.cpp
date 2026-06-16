@@ -55,11 +55,24 @@ Memory::Memory()
             InsertFunction(PPCFuncMappings[i].guest, PPCFuncMappings[i].host);
     }
 
-    // NOTE: Function table protection DISABLED for GTA V.
-    // The game writes to memory beyond the XEX image (0x83DC0000+) for
-    // runtime data (heaps, thread stacks, etc.). Original LibertyRecomp
-    // protected this region as read-only to guard against host pointer
-    // corruption, but GTA V needs full read/write access.
+    // Protect the function lookup table as read-only to prevent
+    // game writes from corrupting host function pointers.
+    // The VEH handler in crash_guard.h handles write faults by
+    // temporarily unprotecting pages that the game legitimately needs.
+    constexpr size_t kPageSize = 0x1000;
+    constexpr size_t kFuncTableOffset = PPC_IMAGE_BASE + PPC_IMAGE_SIZE;
+    constexpr size_t kFuncTableSize = (PPC_CODE_SIZE * 2) + sizeof(PPCFunc*);
+    const size_t protectBegin = AlignDown(kFuncTableOffset, kPageSize);
+    const size_t protectEnd = AlignUp(kFuncTableOffset + kFuncTableSize, kPageSize);
+    if (protectEnd > protectBegin)
+    {
+#ifdef _WIN32
+        DWORD oldProtect{};
+        VirtualProtect(base + protectBegin, protectEnd - protectBegin, PAGE_READONLY, &oldProtect);
+#else
+        mprotect(base + protectBegin, protectEnd - protectBegin, PROT_READ);
+#endif
+    }
 }
 
 void* MmGetHostAddress(uint32_t ptr)
