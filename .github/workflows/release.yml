@@ -61,25 +61,25 @@ jobs:
         run: cmake . --preset ${{ env.CMAKE_PRESET }} -DSDL2MIXER_VORBIS=VORBISFILE -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
 
       - name: Build Project
-        run: cmake --build .\out\build\${{ env.CMAKE_PRESET }} --target LibertyRecomp
+        run: cmake --build .\out\build\${{ env.CMAKE_PRESET }} --target SanRecomp
 
       - name: Pack Release
         run: |
           New-Item -ItemType Directory -Path .\release
           New-Item -ItemType Directory -Path .\release\D3D12
 
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\D3D12\D3D12Core.dll" -Destination ".\release\D3D12\D3D12Core.dll"
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\dxcompiler.dll" -Destination ".\release\dxcompiler.dll"
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\dxil.dll" -Destination ".\release\dxil.dll"
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\LibertyRecomp.exe" -Destination ".\release\LibertyRecomp.exe"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\D3D12\D3D12Core.dll" -Destination ".\release\D3D12\D3D12Core.dll"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\dxcompiler.dll" -Destination ".\release\dxcompiler.dll"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\dxil.dll" -Destination ".\release\dxil.dll"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\SanRecomp.exe" -Destination ".\release\SanRecomp.exe"
           
-          Compress-Archive -Path .\release\* -DestinationPath LibertyRecomp-Windows-x64.zip
+          Compress-Archive -Path .\release\* -DestinationPath SanRecomp-Windows-x64.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-Windows-x64
-          path: LibertyRecomp-Windows-x64.zip
+          name: SanRecomp-Windows-x64
+          path: SanRecomp-Windows-x64.zip
 
   # ============================================================================
   # Linux x64 Build
@@ -133,19 +133,19 @@ jobs:
       - name: Build Project
         env:
           CCACHE_DIR: /tmp/ccache
-        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target LibertyRecomp
+        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target SanRecomp
 
       - name: Pack Release
         run: |
           mkdir -p release
-          cp ./out/build/${{ env.CMAKE_PRESET }}/LibertyRecomp/LibertyRecomp release/
-          tar -czvf LibertyRecomp-Linux-x64.tar.gz -C release .
+          cp ./out/build/${{ env.CMAKE_PRESET }}/SanRecomp/SanRecomp release/
+          tar -czvf SanRecomp-Linux-x64.tar.gz -C release .
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-Linux-x64
-          path: LibertyRecomp-Linux-x64.tar.gz
+          name: SanRecomp-Linux-x64
+          path: SanRecomp-Linux-x64.tar.gz
 
   # ============================================================================
   # Linux ARM64 Build
@@ -199,19 +199,19 @@ jobs:
       - name: Build Project
         env:
           CCACHE_DIR: /tmp/ccache
-        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target LibertyRecomp
+        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target SanRecomp
 
       - name: Pack Release
         run: |
           mkdir -p release
-          cp ./out/build/${{ env.CMAKE_PRESET }}/LibertyRecomp/LibertyRecomp release/
-          tar -czvf LibertyRecomp-Linux-ARM64.tar.gz -C release .
+          cp ./out/build/${{ env.CMAKE_PRESET }}/SanRecomp/SanRecomp release/
+          tar -czvf SanRecomp-Linux-ARM64.tar.gz -C release .
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-Linux-ARM64
-          path: LibertyRecomp-Linux-ARM64.tar.gz
+          name: SanRecomp-Linux-ARM64
+          path: SanRecomp-Linux-ARM64.tar.gz
 
   # ============================================================================
   # macOS ARM64 Build (Apple Silicon)
@@ -254,19 +254,19 @@ jobs:
       - name: Build Project
         env:
           CCACHE_DIR: /tmp/ccache
-        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target LibertyRecomp
+        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target SanRecomp
 
       - name: Pack Release
         run: |
-          codesign --deep -fs - "./out/build/${{ env.CMAKE_PRESET }}/LibertyRecomp/Liberty Recompiled.app"
-          cd ./out/build/${{ env.CMAKE_PRESET }}/LibertyRecomp
-          zip -r ../../../../LibertyRecomp-macOS-ARM64.zip "Liberty Recompiled.app"
+          codesign --deep -fs - "./out/build/${{ env.CMAKE_PRESET }}/SanRecomp/San Recompiled.app"
+          cd ./out/build/${{ env.CMAKE_PRESET }}/SanRecomp
+          zip -r ../../../../SanRecomp-macOS-ARM64.zip "San Recompiled.app"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-macOS-ARM64
-          path: LibertyRecomp-macOS-ARM64.zip
+          name: SanRecomp-macOS-ARM64
+          path: SanRecomp-macOS-ARM64.zip
 
   # ============================================================================
   # Windows ARM64 Build
@@ -312,25 +312,25 @@ jobs:
         run: cmake . --preset ${{ env.CMAKE_PRESET }} -DSDL2MIXER_VORBIS=VORBISFILE -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
 
       - name: Build Project
-        run: cmake --build .\out\build\${{ env.CMAKE_PRESET }} --target LibertyRecomp
+        run: cmake --build .\out\build\${{ env.CMAKE_PRESET }} --target SanRecomp
 
       - name: Pack Release
         run: |
           New-Item -ItemType Directory -Path .\release
           New-Item -ItemType Directory -Path .\release\D3D12
 
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\D3D12\D3D12Core.dll" -Destination ".\release\D3D12\D3D12Core.dll"
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\dxcompiler.dll" -Destination ".\release\dxcompiler.dll"
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\dxil.dll" -Destination ".\release\dxil.dll"
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\LibertyRecomp.exe" -Destination ".\release\LibertyRecomp.exe"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\D3D12\D3D12Core.dll" -Destination ".\release\D3D12\D3D12Core.dll"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\dxcompiler.dll" -Destination ".\release\dxcompiler.dll"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\dxil.dll" -Destination ".\release\dxil.dll"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\SanRecomp.exe" -Destination ".\release\SanRecomp.exe"
           
-          Compress-Archive -Path .\release\* -DestinationPath LibertyRecomp-Windows-ARM64.zip
+          Compress-Archive -Path .\release\* -DestinationPath SanRecomp-Windows-ARM64.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-Windows-ARM64
-          path: LibertyRecomp-Windows-ARM64.zip
+          name: SanRecomp-Windows-ARM64
+          path: SanRecomp-Windows-ARM64.zip
 
   # ============================================================================
   # macOS x64 Build (Intel)
@@ -373,19 +373,19 @@ jobs:
       - name: Build Project
         env:
           CCACHE_DIR: /tmp/ccache
-        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target LibertyRecomp
+        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target SanRecomp
 
       - name: Pack Release
         run: |
-          codesign --deep -fs - "./out/build/${{ env.CMAKE_PRESET }}/LibertyRecomp/Liberty Recompiled.app"
-          cd ./out/build/${{ env.CMAKE_PRESET }}/LibertyRecomp
-          zip -r ../../../../LibertyRecomp-macOS-x64.zip "Liberty Recompiled.app"
+          codesign --deep -fs - "./out/build/${{ env.CMAKE_PRESET }}/SanRecomp/San Recompiled.app"
+          cd ./out/build/${{ env.CMAKE_PRESET }}/SanRecomp
+          zip -r ../../../../SanRecomp-macOS-x64.zip "San Recompiled.app"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-macOS-x64
-          path: LibertyRecomp-macOS-x64.zip
+          name: SanRecomp-macOS-x64
+          path: SanRecomp-macOS-x64.zip
 
   # ============================================================================
   # Linux Flatpak Build
@@ -430,7 +430,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-Flatpak
+          name: SanRecomp-Flatpak
           path: ./${{ env.FLATPAK_ID }}.flatpak
 
   # ============================================================================
@@ -443,7 +443,7 @@ jobs:
       contents: write
     env:
       SHADER_INPUT: tools/rage_fxc_extractor/extracted_shaders
-      SHADER_OUTPUT: LibertyRecompLib/shader/shader_cache.cpp
+      SHADER_OUTPUT: SanRecompLib/shader/shader_cache.cpp
       SHADER_COMMON: tools/XenosRecomp/XenosRecomp/shader_common.h
 
     steps:
@@ -542,13 +542,13 @@ jobs:
       - name: Prepare Release Files
         run: |
           mkdir -p release-files
-          cp artifacts/LibertyRecomp-Windows-x64/LibertyRecomp-Windows-x64.zip release-files/
-          cp artifacts/LibertyRecomp-Windows-ARM64/LibertyRecomp-Windows-ARM64.zip release-files/
-          cp artifacts/LibertyRecomp-Linux-x64/LibertyRecomp-Linux-x64.tar.gz release-files/
-          cp artifacts/LibertyRecomp-Linux-ARM64/LibertyRecomp-Linux-ARM64.tar.gz release-files/
-          cp artifacts/LibertyRecomp-macOS-ARM64/LibertyRecomp-macOS-ARM64.zip release-files/
-          cp artifacts/LibertyRecomp-macOS-x64/LibertyRecomp-macOS-x64.zip release-files/
-          cp artifacts/LibertyRecomp-Flatpak/*.flatpak release-files/
+          cp artifacts/SanRecomp-Windows-x64/SanRecomp-Windows-x64.zip release-files/
+          cp artifacts/SanRecomp-Windows-ARM64/SanRecomp-Windows-ARM64.zip release-files/
+          cp artifacts/SanRecomp-Linux-x64/SanRecomp-Linux-x64.tar.gz release-files/
+          cp artifacts/SanRecomp-Linux-ARM64/SanRecomp-Linux-ARM64.tar.gz release-files/
+          cp artifacts/SanRecomp-macOS-ARM64/SanRecomp-macOS-ARM64.zip release-files/
+          cp artifacts/SanRecomp-macOS-x64/SanRecomp-macOS-x64.zip release-files/
+          cp artifacts/SanRecomp-Flatpak/*.flatpak release-files/
           cp artifacts/DXIL-shader-cache/DXIL-shader-cache.zip release-files/ || true
           ls -la release-files/
 
@@ -565,21 +565,21 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: Liberty Recompiled ${{ steps.version.outputs.version }}
+          name: San Recompiled ${{ steps.version.outputs.version }}
           draft: false
           prerelease: ${{ contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
           generate_release_notes: true
           files: |
-            release-files/LibertyRecomp-Windows-x64.zip
-            release-files/LibertyRecomp-Windows-ARM64.zip
-            release-files/LibertyRecomp-Linux-x64.tar.gz
-            release-files/LibertyRecomp-Linux-ARM64.tar.gz
-            release-files/LibertyRecomp-macOS-ARM64.zip
-            release-files/LibertyRecomp-macOS-x64.zip
+            release-files/SanRecomp-Windows-x64.zip
+            release-files/SanRecomp-Windows-ARM64.zip
+            release-files/SanRecomp-Linux-x64.tar.gz
+            release-files/SanRecomp-Linux-ARM64.tar.gz
+            release-files/SanRecomp-macOS-ARM64.zip
+            release-files/SanRecomp-macOS-x64.zip
             release-files/*.flatpak
             release-files/DXIL-shader-cache.zip
           body: |
-            ## Liberty Recompiled ${{ steps.version.outputs.version }}
+            ## San Recompiled ${{ steps.version.outputs.version }}
             
             A static recompilation of Grand Theft Auto IV for Xbox 360.
             
@@ -587,13 +587,13 @@ jobs:
             
             | Platform | Architecture | Download |
             |----------|--------------|----------|
-            | Windows | x64 | `LibertyRecomp-Windows-x64.zip` |
-            | Windows | ARM64 | `LibertyRecomp-Windows-ARM64.zip` |
-            | Linux | x64 | `LibertyRecomp-Linux-x64.tar.gz` |
-            | Linux | ARM64 | `LibertyRecomp-Linux-ARM64.tar.gz` |
+            | Windows | x64 | `SanRecomp-Windows-x64.zip` |
+            | Windows | ARM64 | `SanRecomp-Windows-ARM64.zip` |
+            | Linux | x64 | `SanRecomp-Linux-x64.tar.gz` |
+            | Linux | ARM64 | `SanRecomp-Linux-ARM64.tar.gz` |
             | Linux | Flatpak | `io.github.ozordi.libertyrecomp.flatpak` |
-            | macOS | ARM64 (Apple Silicon) | `LibertyRecomp-macOS-ARM64.zip` |
-            | macOS | x64 (Intel) | `LibertyRecomp-macOS-x64.zip` |
+            | macOS | ARM64 (Apple Silicon) | `SanRecomp-macOS-ARM64.zip` |
+            | macOS | x64 (Intel) | `SanRecomp-macOS-x64.zip` |
             
             ### Requirements
             

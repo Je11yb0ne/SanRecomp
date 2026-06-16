@@ -62,11 +62,11 @@ jobs:
             mkdir -p ./private
             auth_b64="$(printf 'x-access-token:%s' "${ASSET_REPO_TOKEN}" | base64)"
             git -c http.extraHeader="AUTHORIZATION: basic ${auth_b64}" clone --depth 1 "https://github.com/${ASSET_REPO}.git" ./private
-            mkdir -p ./LibertyRecompLib/private
-            cp ./private/* ./LibertyRecompLib/private
+            mkdir -p ./SanRecompLib/private
+            cp ./private/* ./SanRecompLib/private
           else
-            mkdir -p ./LibertyRecompLib/private
-            touch ./LibertyRecompLib/private/.gitkeep
+            mkdir -p ./SanRecompLib/private
+            touch ./SanRecompLib/private/.gitkeep
           fi
   
       - name: Configure Project
@@ -86,13 +86,13 @@ jobs:
       - name: Build Project
         env:
           CCACHE_DIR: /tmp/ccache
-        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target LibertyRecomp
+        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target SanRecomp
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-Linux-${{ env.CMAKE_PRESET }}
-          path: ./out/build/${{ env.CMAKE_PRESET }}/LibertyRecomp/LibertyRecomp
+          name: SanRecomp-Linux-${{ env.CMAKE_PRESET }}
+          path: ./out/build/${{ env.CMAKE_PRESET }}/SanRecomp/SanRecomp
 
   build-windows:
     name: Build Windows
@@ -144,41 +144,41 @@ jobs:
             New-Item -ItemType Directory -Path .\private -Force | Out-Null
             $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$env:ASSET_REPO_TOKEN"))
             git -c "http.extraHeader=AUTHORIZATION: basic $b64" clone --depth 1 "https://github.com/$env:ASSET_REPO.git" .\private
-            New-Item -ItemType Directory -Path .\LibertyRecompLib\private -Force | Out-Null
-            Copy-Item -Path .\private\* -Destination .\LibertyRecompLib\private -Force
+            New-Item -ItemType Directory -Path .\SanRecompLib\private -Force | Out-Null
+            Copy-Item -Path .\private\* -Destination .\SanRecompLib\private -Force
           } else {
-            New-Item -ItemType Directory -Path .\LibertyRecompLib\private -Force | Out-Null
-            New-Item -ItemType File -Path .\LibertyRecompLib\private\.gitkeep -Force | Out-Null
+            New-Item -ItemType Directory -Path .\SanRecompLib\private -Force | Out-Null
+            New-Item -ItemType File -Path .\SanRecompLib\private\.gitkeep -Force | Out-Null
           }
 
       - name: Configure Project
         run: cmake . --preset ${{ env.CMAKE_PRESET }} -DSDL2MIXER_VORBIS=VORBISFILE -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
 
       - name: Build Project
-        run: cmake --build .\out\build\${{ env.CMAKE_PRESET }} --target LibertyRecomp
+        run: cmake --build .\out\build\${{ env.CMAKE_PRESET }} --target SanRecomp
       
       - name: Pack Release
         run: |
           New-Item -ItemType Directory -Path .\release
           New-Item -ItemType Directory -Path .\release\D3D12
 
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\D3D12\D3D12Core.dll" -Destination ".\release\D3D12\D3D12Core.dll"
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\dxcompiler.dll" -Destination ".\release\dxcompiler.dll"
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\dxil.dll" -Destination ".\release\dxil.dll"
-          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\LibertyRecomp.exe" -Destination ".\release\LibertyRecomp.exe"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\D3D12\D3D12Core.dll" -Destination ".\release\D3D12\D3D12Core.dll"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\dxcompiler.dll" -Destination ".\release\dxcompiler.dll"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\dxil.dll" -Destination ".\release\dxil.dll"
+          Move-Item -Path ".\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\SanRecomp.exe" -Destination ".\release\SanRecomp.exe"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-Windows-${{ env.CMAKE_PRESET }}
+          name: SanRecomp-Windows-${{ env.CMAKE_PRESET }}
           path: .\release
 
       - name: Upload PDB
         uses: actions/upload-artifact@v4
         if: ${{ matrix.preset != 'x64-Clang-Release' }}
         with:
-          name: LibertyRecomp-Windows-${{ env.CMAKE_PRESET }}-PDB
-          path: .\out\build\${{ env.CMAKE_PRESET }}\LibertyRecomp\LibertyRecomp.pdb
+          name: SanRecomp-Windows-${{ env.CMAKE_PRESET }}-PDB
+          path: .\out\build\${{ env.CMAKE_PRESET }}\SanRecomp\SanRecomp.pdb
 
   build-flatpak:
     name: Build Flatpak
@@ -214,11 +214,11 @@ jobs:
             mkdir -p ./private
             auth_b64="$(printf 'x-access-token:%s' "${ASSET_REPO_TOKEN}" | base64)"
             git -c http.extraHeader="AUTHORIZATION: basic ${auth_b64}" clone --depth 1 "https://github.com/${ASSET_REPO}.git" ./private
-            mkdir -p ./LibertyRecompLib/private
-            cp ./private/* ./LibertyRecompLib/private
+            mkdir -p ./SanRecompLib/private
+            cp ./private/* ./SanRecompLib/private
           else
-            mkdir -p ./LibertyRecompLib/private
-            touch ./LibertyRecompLib/private/.gitkeep
+            mkdir -p ./SanRecompLib/private
+            touch ./SanRecompLib/private/.gitkeep
           fi
 
       - name: Prepare Flatpak
@@ -237,7 +237,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-Flatpak
+          name: SanRecomp-Flatpak
           path: ./${{ env.FLATPAK_ID }}.flatpak
 
   build-macos:
@@ -290,11 +290,11 @@ jobs:
             mkdir -p ./private
             auth_b64="$(printf 'x-access-token:%s' "${ASSET_REPO_TOKEN}" | base64)"
             git -c http.extraHeader="AUTHORIZATION: basic ${auth_b64}" clone --depth 1 "https://github.com/${ASSET_REPO}.git" ./private
-            mkdir -p ./LibertyRecompLib/private
-            cp ./private/* ./LibertyRecompLib/private
+            mkdir -p ./SanRecompLib/private
+            cp ./private/* ./SanRecompLib/private
           else
-            mkdir -p ./LibertyRecompLib/private
-            touch ./LibertyRecompLib/private/.gitkeep
+            mkdir -p ./SanRecompLib/private
+            touch ./SanRecompLib/private/.gitkeep
           fi
 
       - name: Configure Project
@@ -305,15 +305,15 @@ jobs:
       - name: Build Project
         env:
           CCACHE_DIR: /tmp/ccache
-        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target LibertyRecomp
+        run: cmake --build ./out/build/${{ env.CMAKE_PRESET }} --target SanRecomp
 
       - name: Pack Release
         run: |
-          codesign --deep -fs - "./out/build/${{ env.CMAKE_PRESET }}/LibertyRecomp/Liberty Recompiled.app"
-          tar -czf LibertyRecomp-macOS-${{ matrix.arch }}-${{ env.CMAKE_PRESET }}.tar.gz -C ./out/build/${{ env.CMAKE_PRESET }}/LibertyRecomp "Liberty Recompiled.app"
+          codesign --deep -fs - "./out/build/${{ env.CMAKE_PRESET }}/SanRecomp/San Recompiled.app"
+          tar -czf SanRecomp-macOS-${{ matrix.arch }}-${{ env.CMAKE_PRESET }}.tar.gz -C ./out/build/${{ env.CMAKE_PRESET }}/SanRecomp "San Recompiled.app"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LibertyRecomp-macOS-${{ matrix.arch }}-${{ env.CMAKE_PRESET }}
-          path: LibertyRecomp-macOS-${{ matrix.arch }}-${{ env.CMAKE_PRESET }}.tar.gz
+          name: SanRecomp-macOS-${{ matrix.arch }}-${{ env.CMAKE_PRESET }}
+          path: SanRecomp-macOS-${{ matrix.arch }}-${{ env.CMAKE_PRESET }}.tar.gz
