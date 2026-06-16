@@ -8215,3 +8215,14 @@ static std::thread s_vblankThread;
 void StartVBlankThread(){extern void _VideoPresent();if(s_vblankRunning.exchange(true))return;s_vblankThread=std::thread([]{printf("[VBlank] Started\n");fflush(stdout);while(s_vblankRunning.load()){std::this_thread::sleep_for(std::chrono::milliseconds(16));if(g_gpuRingBuffer.interruptCallback!=0){static int t=0;if(++t<=5)printf("[VBlank] Fire 0x%08X t=%d\n",g_gpuRingBuffer.interruptCallback,t),fflush(stdout);auto fn=g_memory.FindFunction(g_gpuRingBuffer.interruptCallback);if(fn){PPCContext vc=*g_ppcContext;vc.r3.u32=g_gpuRingBuffer.interruptUserData;fn(vc,g_memory.base);}}}});}
 
 // sub_8362A5F0 — let game init naturally (VBlank started from main.cpp)
+
+// Init loop breakers — skip functions that loop forever on uninitialized data
+void sub_83626A3C(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83626A3C #%d\n",n);
+}
+void sub_83627808(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83627808 #%d\n",n);
+}
+void sub_836267B0(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_836267B0 #%d\n",n);
+}
