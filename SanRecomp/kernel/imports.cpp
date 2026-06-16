@@ -4202,6 +4202,9 @@ void sub_83196A28(PPCContext& __restrict ctx, uint8_t* base) {
     static int n=0; if(++n<=3) printf("[PATCH] sub_83196A28 #%d\n",n);
 }
 // Strong override for sub_83195350 — stuck in data processing loop.
+void sub_8363EF28(PPCContext& __restrict ctx, uint8_t* base) { static int n=0; if(++n<=3) printf("[PATCH] sub_8363EF28 #%d (prevents KeBugCheck+shutdown)\n",n); ctx.r3.s64 = 0; }
+void sub_82232F00(PPCContext& __restrict ctx, uint8_t* base) { static int n=0; if(++n<=2) printf("[PATCH] sub_82232F00 #%d\n",n); }
+void sub_823F4000(PPCContext& __restrict ctx, uint8_t* base) { static int n=0; if(++n<=3) printf("[PATCH] sub_823F4000 #%d\n",n); }
 void sub_83195350(PPCContext& __restrict ctx, uint8_t* base) {
     static int n=0; if(++n<=3) printf("[PATCH] sub_83195350 #%d (r11_loop_ctr_from_0x8385D29C)\n",n);
 }
