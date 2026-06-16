@@ -5530,21 +5530,49 @@ void RtlTimeToTimeFields(const be<uint64_t>* time, TIME_FIELDS* timeFields)
     timeFields->Day = static_cast<uint16_t>(dayOfYear);
 }
 
-void RtlFreeAnsiString()
-{
-    LOG_UTILITY("!!! STUB !!!");
+// Minimal RTL string implementations (replace LOG_UTILITY stubs)
+void RtlInitUnicodeString() {
+    PPCContext* ctx = GetPPCContext();
+    // r3 = PUNICODE_STRING dest, r4 = PCWSTR source
+    // Write length fields to the dest structure
+    if (!ctx || !ctx->r3.u32) return;
+    uint32_t dest = ctx->r3.u32;
+    uint32_t src = ctx->r4.u32;
+    uint16_t len = 0;
+    uint16_t maxLen = 0;
+    if (src) {
+        // FIXME: compute actual length from source string
+        len = 512; maxLen = 514;
+    }
+    // Write UNICODE_STRING: Length(2) + MaximumLength(2) + Buffer(4)
+    *(uint16_t*)(g_memory.base + dest + 0) = __builtin_bswap16(len);
+    *(uint16_t*)(g_memory.base + dest + 2) = __builtin_bswap16(maxLen);
+    *(uint32_t*)(g_memory.base + dest + 4) = __builtin_bswap32(src);
+    static int n=0; if(++n<=3) printf("[RTL] RtlInitUnicodeString dest=0x%X src=0x%X\n",dest,src);
+    fflush(stdout);
 }
 
-void RtlUnicodeStringToAnsiString()
-{
-    LOG_UTILITY("!!! STUB !!!");
+void RtlUnicodeStringToAnsiString() {
+    PPCContext* ctx = GetPPCContext();
+    if (!ctx) return;
+    uint32_t dest = ctx->r3.u32;
+    uint32_t src = ctx->r4.u32;
+    // Initialize result with empty string
+    if (dest) {
+        *(uint16_t*)(g_memory.base + dest + 0) = 0;  // Length
+        *(uint16_t*)(g_memory.base + dest + 2) = 0;  // MaxLength
+        *(uint32_t*)(g_memory.base + dest + 4) = 0;  // Buffer
+    }
+    static int n=0; if(++n<=3) printf("[RTL] RtlUnicodeStringToAnsiString dest=0x%X src=0x%X\n",dest,src);
+    fflush(stdout);
+    ctx->r3.u64 = 0; // STATUS_SUCCESS
 }
 
-void RtlInitUnicodeString()
-{
-    LOG_UTILITY("!!! STUB !!!");
+void RtlFreeAnsiString() {
+    // No-op: we don't allocate
+    static int n=0; if(++n<=3) printf("[RTL] RtlFreeAnsiString\n");
+    fflush(stdout);
 }
-
 void ExTerminateThread(uint32_t exitCode)
 {
     // Thread termination request. The calling thread should exit.
