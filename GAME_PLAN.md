@@ -4,7 +4,7 @@
 
 **Rule:** After each phase, update this file. Never deviate from the current phase. Never ask "continue?" — just work.
 
-**Current Phase:** Phase 3 — Rendering + UI Active ✅ IN PROGRESS
+**Current Phase: 4 — Rendering Pipeline + Game Boot** ✅ IN PROGRESS
 
 ## ✅ Phase 1 COMPLETE (2026-06-15)
 - SanRecomp.exe: 105MB PE32+ x64, 0 compile errors, 0 linker errors
@@ -31,11 +31,18 @@
 - NFD + soundtouch stubs added
 - InstallerWizard::Run reached at runtime (exit code 3)
 - All D3D12 GPU resources created successfully
-- ⚠️ Full pipeline skipped for Intel GPU (crashes in getSampleCountsSupported/createCommandQueue)
+
+## ✅ Phase 4a: Minimal D3D12 Clear+Present (2026-06-16)
+- Swap chain + backbuffer + descriptor sets created before #if 0 block
+- BeginCommandList null-guarded for minimal mode (skips descriptor binding on Intel)
+- Initial clear+present works — window shows dark purple instead of black
+- Root cause: Intel D3D12 driver crashes on SetDescriptorHeaps/SetGraphicsRootDescriptorTable
+- 0 compile errors, 0 crashes at runtime
 
 ## Phase 4: Rendering Pipeline + Game Boot (NEXT)
 **Goal:** Fix D3D12 pipeline crashes on Intel, complete game boot
-**Blockers:** Intel D3D12 driver issues, PPC code hangs without output, GitHub push permission
+**Achieved:** Minimal clear+present working ✅
+**Blockers:** Intel D3D12 driver issues (descriptor heaps), PPC code hangs without output
 
 **⚠️ Self-Audit Checklist — Run Before Each Work Session:**
 1. Read CLAUDE.md

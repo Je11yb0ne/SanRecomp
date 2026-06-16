@@ -1976,12 +1976,20 @@ static void BeginCommandList()
     commandList->begin();
     commandList->resetQueryPool(g_queryPools[g_frame].get(), 0, NUM_QUERIES);
     commandList->writeTimestamp(g_queryPools[g_frame].get(), 0);
-    commandList->setGraphicsPipelineLayout(g_pipelineLayout.get());
-    commandList->setGraphicsDescriptorSet(g_textureDescriptorSet.get(), 0);
-    commandList->setGraphicsDescriptorSet(g_textureDescriptorSet.get(), 1);
-    commandList->setGraphicsDescriptorSet(g_textureDescriptorSet.get(), 2);
-    commandList->setGraphicsDescriptorSet(g_samplerDescriptorSet.get(), 3);
-    commandList->setGraphicsDescriptorSet(g_conditionalSurveyDescriptorSet.get(), 4);
+    // Descriptor set binding — skip if pipeline layout wasn't created (minimal mode)
+    // Intel D3D12 driver crashes on SetDescriptorHeaps/SetGraphicsRootDescriptorTable
+    if (g_pipelineLayout) {
+        commandList->setGraphicsPipelineLayout(g_pipelineLayout.get());
+        if (g_textureDescriptorSet) {
+            commandList->setGraphicsDescriptorSet(g_textureDescriptorSet.get(), 0);
+            commandList->setGraphicsDescriptorSet(g_textureDescriptorSet.get(), 1);
+            commandList->setGraphicsDescriptorSet(g_textureDescriptorSet.get(), 2);
+        }
+        if (g_samplerDescriptorSet)
+            commandList->setGraphicsDescriptorSet(g_samplerDescriptorSet.get(), 3);
+        if (g_conditionalSurveyDescriptorSet)
+            commandList->setGraphicsDescriptorSet(g_conditionalSurveyDescriptorSet.get(), 4);
+    }
 
     g_readyForCommands = true;
     g_readyForCommands.notify_one();
@@ -2286,7 +2294,152 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
         printf("[Video] CRASH in render setup (outer)! Code=0x%08X\n", GetExceptionCode()); fflush(stdout);
         return false;
     }
-    printf("[Video] Post-SEH: returning true (pipeline setup skipped for Intel GPU)\n"); fflush(stdout);
+    printf("[Video] Post-SEH: setting up minimal swap chain + backbuffer...\n"); fflush(stdout);
+
+    // =========================================================================
+    // Minimal swap chain + backbuffer setup
+    // Bypasses Intel D3D12 pipeline creation crashes while enabling basic Present
+    // =========================================================================
+    {
+        uint32_t bufferCount;
+        switch (Config::TripleBuffering)
+        {
+        case ETripleBuffering::Auto:
+            bufferCount = 3; // D3D12 flip discard model
+            break;
+        case ETripleBuffering::On:
+            bufferCount = 3;
+            break;
+        case ETripleBuffering::Off:
+            bufferCount = 2;
+            break;
+        }
+
+        printf("[Video] Creating swap chain (bufferCount=%u)...\n", bufferCount); fflush(stdout);
+        g_swapChain = g_queue->createSwapChain(RenderSwapChainDesc(
+            GameWindow::s_renderWindow, BACKBUFFER_FORMAT, bufferCount, false, Config::MaxFrameLatency));
+        printf("[Video] Swap chain: %p\n", (void*)g_swapChain.get()); fflush(stdout);
+
+        if (g_swapChain)
+        {
+            g_swapChain->setVsyncEnabled(Config::VSync);
+
+            // Create acquire + render semaphores
+            for (auto& sem : g_acquireSemaphores)
+                sem = g_device->createCommandSemaphore();
+            for (auto& sem : g_renderSemaphores)
+                sem = g_device->createCommandSemaphore();
+
+            // Create texture descriptor set (needed by BeginCommandList)
+            {
+                RenderDescriptorSetBuilder builder;
+                builder.begin();
+                builder.addTexture(0, TEXTURE_DESCRIPTOR_SIZE);
+                builder.end(true, TEXTURE_DESCRIPTOR_SIZE);
+                g_textureDescriptorSet = builder.create(g_device.get());
+            }
+
+            // Create blank textures for null descriptor slots
+            for (size_t i = 0; i < TEXTURE_DESCRIPTOR_NULL_COUNT; i++)
+            {
+                RenderTextureDesc desc;
+                desc.width = 1; desc.height = 1; desc.depth = 1;
+                desc.mipLevels = 1;
+                desc.format = RenderFormat::R8_UNORM;
+
+                RenderTextureViewDesc viewDesc;
+                viewDesc.format = desc.format;
+                viewDesc.componentMapping = RenderComponentMapping(
+                    RenderSwizzle::ZERO, RenderSwizzle::ZERO,
+                    RenderSwizzle::ZERO, RenderSwizzle::ZERO);
+                viewDesc.mipLevels = 1;
+
+                switch (i)
+                {
+                case TEXTURE_DESCRIPTOR_NULL_TEXTURE_2D:
+                    desc.dimension = RenderTextureDimension::TEXTURE_2D;
+                    desc.arraySize = 1;
+                    viewDesc.dimension = RenderTextureViewDimension::TEXTURE_2D;
+                    break;
+                case TEXTURE_DESCRIPTOR_NULL_TEXTURE_2D_ARRAY:
+                    desc.dimension = RenderTextureDimension::TEXTURE_2D;
+                    desc.arraySize = 1;
+                    viewDesc.dimension = RenderTextureViewDimension::TEXTURE_2D;
+                    break;
+                case TEXTURE_DESCRIPTOR_NULL_TEXTURE_CUBE:
+                    desc.dimension = RenderTextureDimension::TEXTURE_2D;
+                    desc.arraySize = 6;
+                    desc.flags = RenderTextureFlag::CUBE;
+                    viewDesc.dimension = RenderTextureViewDimension::TEXTURE_CUBE;
+                    break;
+                default:
+                    break;
+                }
+
+                g_blankTextures[i] = g_device->createTexture(desc);
+                g_blankTextureViews[i] = g_blankTextures[i]->createTextureView(viewDesc);
+                g_textureDescriptorSet->setTexture(i, g_blankTextures[i].get(),
+                    RenderTextureLayout::SHADER_READ, g_blankTextureViews[i].get());
+            }
+
+            // Create sampler descriptor set (needed by BeginCommandList)
+            {
+                RenderDescriptorSetBuilder builder;
+                builder.begin();
+                builder.addSampler(0, SAMPLER_DESCRIPTOR_SIZE);
+                builder.end(true, SAMPLER_DESCRIPTOR_SIZE);
+                g_samplerDescriptorSet = builder.create(g_device.get());
+                auto defaultSampler = g_device->createSampler(g_samplerDescs[0]);
+                g_samplerDescriptorSet->setSampler(0, defaultSampler.get());
+                auto& [descIdx, samplerPtr] = g_samplerStates[XXH3_64bits(
+                    &g_samplerDescs[0], sizeof(RenderSamplerDesc))];
+                descIdx = 1;
+                samplerPtr = std::move(defaultSampler);
+            }
+
+            // Create minimal backbuffer
+            g_backBufferHolder = std::make_unique<GuestSurface>(ResourceType::RenderTarget);
+            g_backBuffer = g_backBufferHolder.get();
+            g_backBuffer->width = 1280;
+            g_backBuffer->height = 720;
+            g_backBuffer->format = BACKBUFFER_FORMAT;
+            g_backBuffer->textureHolder = g_device->createTexture(
+                RenderTextureDesc::Texture2D(1, 1, 1, BACKBUFFER_FORMAT,
+                    RenderTextureFlag::RENDER_TARGET));
+
+            // Acquire first backbuffer + begin command list
+            // Note: CheckSwapChain calls ComputeViewportDimensions when g_needsResize
+            printf("[Video] Calling CheckSwapChain...\n"); fflush(stdout);
+            CheckSwapChain();
+            printf("[Video] CheckSwapChain done, swapChainValid=%d\n",
+                g_swapChainValid); fflush(stdout);
+            printf("[Video] Calling BeginCommandList...\n"); fflush(stdout);
+            BeginCommandList();
+            printf("[Video] BeginCommandList done\n"); fflush(stdout);
+
+            // Initial clear+present — show purple immediately, don't wait for PPC Present()
+            printf("[Video] Performing initial clear+present...\n"); fflush(stdout);
+            {
+                auto& cmdList = g_commandLists[g_frame];
+                // Create framebuffer for backbuffer's intermediary texture
+                RenderFramebufferDesc fbDesc;
+                fbDesc.colorAttachments = const_cast<const RenderTexture**>(&g_renderTarget->texture);
+                fbDesc.colorAttachmentsCount = 1;
+                auto framebuffer = g_device->createFramebuffer(fbDesc);
+                cmdList->setFramebuffer(framebuffer.get());
+                // Clear to dark purple (same as Present's heartbeat clear)
+                cmdList->clearColor(0, RenderColor(0.1f, 0.0f, 0.2f, 1.0f));
+                // End, execute, wait
+                cmdList->end();
+                g_queue->executeCommandLists(cmdList.get(), g_commandFences[g_frame].get());
+                g_queue->waitForCommandFence(g_commandFences[g_frame].get());
+                // Present the backbuffer
+                g_swapChain->present(g_backBufferIndex, nullptr, 0);
+                printf("[Video] Initial present done!\n"); fflush(stdout);
+            }
+        }
+    }
+    printf("[Video] Minimal setup done, returning true\n"); fflush(stdout);
     return true;
 
 #if 0 // DISABLED: Pipeline setup crashes on Intel D3D12
