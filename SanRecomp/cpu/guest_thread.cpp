@@ -311,6 +311,11 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
     // when the 8GB VirtualAlloc at 0x100000000 fails and falls back to nullptr.
     VirtualAlloc(g_memory.base, 0x1000, MEM_COMMIT, PAGE_READWRITE);
 
+    // Start VBlank render driver before PPC code runs — polls for
+    // registered graphics callback during and after init.
+    extern void StartVBlankThread();
+    StartVBlankThread();
+
     func(ctx.ppcContext, g_memory.base);
 
     ppcRunning.store(false);
