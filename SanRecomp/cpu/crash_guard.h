@@ -16,6 +16,15 @@ struct ScopedCrashGuard {
     static LONG WINAPI Handler(EXCEPTION_POINTERS* info) {
         DWORD code = info->ExceptionRecord->ExceptionCode;
 
+        // C++ exception (0xE06D7363) or stack overflow (0xC00000FD):
+        // log and attempt to continue
+        if (code == 0xE06D7363 || code == 0xC00000FD) {
+            printf("[CRASH] Exception 0x%08lX — attempting to continue\n", code);
+            if (g_ppcContext) g_ppcContext->r3.s64 = -1;
+            fflush(stdout);
+            return EXCEPTION_CONTINUE_EXECUTION;
+        }
+
         if (code == EXCEPTION_ACCESS_VIOLATION) {
             ULONG_PTR fa = info->ExceptionRecord->ExceptionInformation[1];
             DWORD op = (DWORD)info->ExceptionRecord->ExceptionInformation[0];

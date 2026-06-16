@@ -4189,6 +4189,13 @@ uint32_t KeGetCurrentProcessType()
 // ============================================================================
 
 // ============================================================================
+
+// Strong override for sub_823F4D8C — TLS init with self-recursion.
+// Breaks infinite recursion by returning immediately.
+void sub_823F4D8C(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_823F4D8C #%d broken\n",n);
+}
+
 // Strong override for sub_83641190 — callback dispatcher.
 // Dispatches callbacks from linked list. Many entries have
 // fn=0xFFFFFFFF (uninitialized), causing 1000+ skips/sec.
