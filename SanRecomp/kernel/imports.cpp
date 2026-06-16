@@ -4384,10 +4384,11 @@ void VdSwap()
     static int frame = 0;
     frame++;
     if (frame <= 5 || frame % 60 == 0) {
-        printf("[VdSwap] Frame #%d — presenting\n", frame);
+        printf("[VdSwap] Frame #%d — game swap called\n", frame);
         fflush(stdout);
     }
-    _VideoPresent();
+    // Don't call _VideoPresent() here — it crashes when called from VBlank thread.
+    // Frame presentation is handled by Video::PrepareFrameAndPresent() instead.
 }
 
 void VdGetSystemCommandBuffer()
@@ -4759,6 +4760,13 @@ void FireVBlankCallback() {
                 printf("[VBlank] PrepareAndPresent (#%d)\n", vblankSwapCount);
                 fflush(stdout);
 
+                // Diagnostic: check callback pointer at 0x822E1768
+                uint32_t cbPtrAddr = 0x822E1768;
+                uint32_t* cbPtr = (uint32_t*)(g_memory.base + cbPtrAddr);
+                uint32_t storedCb = __builtin_bswap32(*cbPtr);
+                printf("[CallbackPtr] 0x822E1768 = 0x%08X\n", storedCb);
+                fflush(stdout);
+
                 // Scan ring buffer for PM4 activity (diagnostic)
                 if (g_gpuRingBuffer.initialized && g_gpuRingBuffer.ringBufferBase != 0) {
                     uint32_t* rb = (uint32_t*)(g_memory.base + g_gpuRingBuffer.ringBufferBase);
@@ -4804,20 +4812,24 @@ static void InitVBlankPCR() {
     uint8_t* base = g_memory.base;
     // PCR at 0x82001000 — past the null-page sentinel
     uint32_t pcrBase = 0x82001000;
-    // Write X360_PCR fields (big-endian via PPC_STORE_U32 which does bswap)
     PPC_STORE_U32(pcrBase + 0x00, 0);           // tls_ptr = 0 (no TLS for VBlank)
-    // pcr_ptr at offset 0x30: self-pointer for validation
     PPC_STORE_U32(pcrBase + 0x30, pcrBase);     // pcr_ptr = self
-    // stack info at offset 0x70
     PPC_STORE_U32(pcrBase + 0x70, 0x10000000);  // stack_base
     PPC_STORE_U32(pcrBase + 0x74, 0x0FF00000);  // stack_limit
-    // current_thread at offset 0x100
-    PPC_STORE_U32(pcrBase + 0x100, pcrBase + 0x2000); // TEB pointer (valid non-zero)
-    // dpc_active at offset 0x150
-    PPC_STORE_U32(pcrBase + 0x150, 0);          // dpc_active = 0 (not in DPC mode)
-    // current_cpu at offset 0x10C
-    *(volatile uint8_t*)(base + pcrBase + 0x10C) = 0; // CPU 0
+    PPC_STORE_U32(pcrBase + 0x100, pcrBase + 0x2000); // TEB pointer
+    PPC_STORE_U32(pcrBase + 0x150, 0);          // dpc_active = 0
+    *(volatile uint8_t*)(base + pcrBase + 0x10C) = 0;
     printf("[VBlank] PCR initialized at 0x%08X\n", pcrBase);
+    fflush(stdout);
+
+    // Initialize graphics state at 0x83830000 (userData for VBlank callback)
+    // Size: 64KB filled with self-referential pointers to prevent null deref
+    uint32_t gfxBase = 0x83830000;
+    for (uint32_t off = 0; off < 0x10000; off += 4) {
+        // Fill with self-pointer: each dword points to itself (valid non-null)
+        PPC_STORE_U32(gfxBase + off, gfxBase + off);
+    }
+    printf("[VBlank] Graphics state initialized at 0x%08X (64KB self-refs)\n", gfxBase);
     fflush(stdout);
 }
 
@@ -4838,7 +4850,12 @@ void StartVBlankTimer() {
         g_vblankThread = std::thread(VBlankTimerThread);
         printf("[VBlank] Timer started (60Hz)\n");
     }
-	if(g_gpuRingBuffer.interruptCallback==0){g_gpuRingBuffer.interruptCallback=0x822D41E8;g_gpuRingBuffer.interruptUserData=0;}
+	if(g_gpuRingBuffer.interruptCallback==0){
+		g_gpuRingBuffer.interruptCallback=0x822D41E8;
+		g_gpuRingBuffer.interruptUserData=0x83830000; // Valid PPC address as graphics state
+		printf("[StartVBlankTimer] Fallback callback=0x822D41E8 userData=0x83830000\n");
+		fflush(stdout);
+	}
 }
 
 void StopVBlankTimer() {
@@ -8325,16 +8342,49 @@ void StartVBlankThread(){extern void _VideoPresent();if(s_vblankRunning.exchange
 
 // sub_8362A5F0 — let game init naturally (VBlank started from main.cpp)
 
-// Render callback override — prevent sub_822D41E8 from hanging the VBlank thread.
-// The game has NOT registered a proper callback, so the fallback runs.
-// But sub_822D41E8 gets stuck (wrong init state). Override to no-op.
+// Forward declaration: original PPC function (weak alias target)
+extern "C" void __imp__sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base);
+
+// Render callback — call original implementation with valid userData.
+// SEH-protected in case it still hangs or crashes.
 void sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base) {
     static int n = 0;
-    if (++n <= 3 || n % 60 == 0) {
-        printf("[PATCH] sub_822D41E8 #%d (render callback no-op)\n", n);
+    n++;
+    if (n <= 3 || n % 60 == 0) {
+        printf("[CALLBACK] sub_822D41E8 #%d r3=0x%08llX\n", n, (unsigned long long)ctx.r3.u64);
         fflush(stdout);
     }
-    // Don't call the original — it hangs
+    __try {
+        __imp__sub_822D41E8(ctx, base);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        if (n <= 5) {
+            printf("[CALLBACK] sub_822D41E8 CRASHED! Code=0x%08X\n", GetExceptionCode());
+            fflush(stdout);
+        }
+    }
+}
+
+// Diagnostic override: sub_836BA050 (register VBlank callback with r3=graphicsState)
+void sub_836BA050(PPCContext& __restrict ctx, uint8_t* base) {
+    // r3 = some graphics state pointer (userData for the callback)
+    // r10+5992 at 0x822E1768 should contain the callback address
+    uint32_t cbAddr = __builtin_bswap32(*(uint32_t*)(base + 0x822E1768));
+    printf("[sub_836BA050] Called! r3(userData)=0x%08X cbPtr@0x822E1768=0x%08X\n",
+        ctx.r3.u32, cbAddr);
+    fflush(stdout);
+    // Register the callback using the value from memory
+    if (cbAddr != 0 && cbAddr != 0xFFFFFFFF) {
+        extern void VdSetGraphicsInterruptCallback(uint32_t, uint32_t);
+        VdSetGraphicsInterruptCallback(cbAddr, ctx.r3.u32);
+    }
+}
+// Override sub_836BA680 to call sub_836BA050 (ensure render callback is registered)
+void sub_836BA680(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_836BA680 #%d — manually registering render callback\n",n);
+    fflush(stdout);
+    // Call sub_836BA050 with a dummy r3 (graphics state pointer = 0x83830000)
+    ctx.r3.u64 = 0x83830000;
+    sub_836BA050(ctx, base);
 }
 
 // Init loop breakers — skip functions that loop forever on uninitialized data
