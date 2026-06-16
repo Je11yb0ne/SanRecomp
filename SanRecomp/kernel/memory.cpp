@@ -66,8 +66,21 @@ Memory::Memory()
     const size_t protectEnd = AlignUp(kFuncTableOffset + kFuncTableSize, kPageSize);
     if (protectEnd > protectBegin)
     {
+        // Temporarily make writable to re-populate function table
 #ifdef _WIN32
         DWORD oldProtect{};
+        VirtualProtect(base + protectBegin, protectEnd - protectBegin, PAGE_READWRITE, &oldProtect);
+#else
+        mprotect(base + protectBegin, protectEnd - protectBegin, PROT_READ | PROT_WRITE);
+#endif
+        // Re-insert all function mappings (they may have been loaded before protection)
+        for (size_t i = 0; PPCFuncMappings[i].guest != 0; i++)
+        {
+            if (PPCFuncMappings[i].host != nullptr)
+                InsertFunction(PPCFuncMappings[i].guest, PPCFuncMappings[i].host);
+        }
+        // Now make read-only
+#ifdef _WIN32
         VirtualProtect(base + protectBegin, protectEnd - protectBegin, PAGE_READONLY, &oldProtect);
 #else
         mprotect(base + protectBegin, protectEnd - protectBegin, PROT_READ);

@@ -34,7 +34,26 @@ struct Memory
 
     PPCFunc* FindFunction(uint32_t guest) const noexcept
     {
-        return PPC_LOOKUP_FUNC(base, guest);
+        PPCFunc* fn = PPC_LOOKUP_FUNC(base, guest);
+        // Guard against corrupted table entries from game writes to fn table region.
+        // Auto-heal: re-lookup from PPCFuncMappings if entry looks corrupted.
+        if ((uintptr_t)fn == 0 || (uintptr_t)fn == 0xFFFFFFFFFFFFFFFFull) {
+            // Search PPCFuncMappings for the correct host function
+            for (size_t i = 0; PPCFuncMappings[i].guest != 0; i++) {
+                if (PPCFuncMappings[i].guest == guest) {
+                    fn = PPCFuncMappings[i].host;
+                    PPC_LOOKUP_FUNC(base, guest) = fn;  // repair the slot
+                    static int s_heal_count = 0;
+                    if (++s_heal_count <= 10) {
+                        printf("[MEMORY] Auto-healed fn table entry for PPC=0x%08X\n", guest);
+                        fflush(stdout);
+                    }
+                    return fn;
+                }
+            }
+            return nullptr;
+        }
+        return fn;
     }
 
     void InsertFunction(uint32_t guest, PPCFunc* host)
