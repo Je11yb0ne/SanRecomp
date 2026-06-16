@@ -64,12 +64,14 @@
 - PPC 看门狗增强：追踪 r1/r3 寄存器 + 内核调用
   - 诊断结果：r1 静态 = 卡在单个函数内，无内核调用 → 疑似 busy-wait
 
-## Phase 5: PPC 启动修复 (NEXT)
-**Goal:** 修复 PPC 代码忙等问题，让游戏真正开始初始化
-**方向选项:**
-A. 用 rexglue 完整重编译 GTA V（新框架，功能更全）
-B. 补全 ~260 个缺失的内核 stubs（基于 rexglue 导入表分析）
-C. 用 IDA 反编译入口点找到 busy-wait 地址，Host 端伪造
+## Phase 5: rexglue 迁移 — 用 rexglue 重编译 GTA V (NEXT)
+**决策 (2026-06-16):** rexglue-sdk v0.8.0 作为主要重编译器，XenonRecomp 保留辅助
+**理由:** 310 import symbols vs 50, built-in Runtime, 5.6M instruction analysis
+**任务:**
+1. 完成 `rexglue codegen` 生成完整 C++ 代码
+2. 分析生成的 kernel 实现，对比现有 imports.cpp
+3. 解决 PPC busy-wait 问题（rexglue 可能有不同处理方式）
+4. 集成 rexglue Runtime 替换 Plume/SDL 层（可选，视复杂度）
 
 ## Phase Progress Log
 

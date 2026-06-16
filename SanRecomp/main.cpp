@@ -465,6 +465,17 @@ int main(int argc, char *argv[])
     uint32_t entry = LdrLoadModule(modulePath);
     printf("[Main] Module loaded, entry=0x%08X\n", entry); fflush(stdout);
 
+    // Diagnostic: dump decrypted XEX image for IDA analysis
+    {
+        FILE* dump = fopen("sanrecomp_dump.bin", "wb");
+        if (dump) {
+            size_t imageSize = 0x1DC0000; // PPC_IMAGE_SIZE
+            fwrite(g_memory.Translate(0x82000000), 1, imageSize, dump);
+            fclose(dump);
+            printf("[Main] Dumped %zu bytes decrypted image to sanrecomp_dump.bin\n", imageSize);
+        }
+    }
+
     if (!runInstallerWizard)
     {
         printf("[Main] Creating video device...\n"); fflush(stdout);

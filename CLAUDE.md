@@ -22,9 +22,18 @@ Then at every step:
 
 ## Project Overview
 
-SanRecomp is a static recompilation project porting GTA V (Xbox 360) to PC. It's a fork of LibertyRecomp (GTA IV port) in active migration. The codebase is C++20, built with Clang-cl + Ninja + vcpkg on Windows.
+SanRecomp is a static recompilation project porting GTA V (Xbox 360) to PC. Forked from LibertyRecomp (GTA IV port). C++20, Clang-cl + Ninja + vcpkg on Windows.
 
-**Current Phase: 4 — Rendering Pipeline + Game Boot.** SanRecomp.exe compiles, links (0 errors), and runs. D3D12 device + swap chain work. **Minimal clear+present shows purple window.** PPC code boots via GuestThread::Start (entry=0x83639888) but hangs in a tight loop — no kernel stubs called, stack static. **Blocker:** PPC code busy-waits on unknown condition (疑似等待 Xbox 360 硬件寄存器).
+**Primary Recompiler: rexglue-sdk v0.8.0** (决定 2026-06-16)
+- `refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe`
+- 分析能力远超 XenonRecomp：310 导入，5.6M 指令，10K 代码区域
+- 内置完整 Runtime（D3D12/Vulkan, Audio, Input, ImGui）
+- XenonRecomp 保留作为辅助工具
+
+**Current Phase: 5 — rexglue 迁移 + PPC 启动修复**
+- SanRecomp.exe 可运行，D3D12 紫色窗口 ✅
+- PPC 追踪发现 KeGetCurrentProcessType 被调用
+- 下一步：用 rexglue 完整重编译 GTA V，对比现有代码
 
 ## Build Commands
 

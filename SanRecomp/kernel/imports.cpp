@@ -2043,7 +2043,8 @@ uint32_t XGetLanguage()
 
 uint32_t XGetAVPack()
 {
-    return 0;
+    printf("[KERNEL-TRACE] XGetAVPack called — returning 0 (Standard)\n"); fflush(stdout);
+    return 0; // Standard AV pack (not HDMI=3, Component=4, VGA=6, etc.)
 }
 
 void XamLoaderTerminateTitle()
@@ -3068,7 +3069,8 @@ uint32_t NtCreateEvent(be<uint32_t>* handle, void* objAttributes, uint32_t event
 
 uint32_t XexCheckExecutablePrivilege()
 {
-    return 0;
+    printf("[KERNEL-TRACE] XexCheckExecutablePrivilege called — returning 1 (SUCCESS)\n"); fflush(stdout);
+    return 1; // Return privilege granted
 }
 
 void DbgPrint()
@@ -4154,8 +4156,8 @@ void KeBugCheckEx()
 
 uint32_t KeGetCurrentProcessType()
 {
-    printf("[KERNEL-TRACE] KeGetCurrentProcessType called\n"); fflush(stdout);
-    return 1;
+    printf("[KERNEL-TRACE] KeGetCurrentProcessType called — returning 2 (PROC_GAME)\n"); fflush(stdout);
+    return 2; // PROC_GAME — game processes may need this
 }
 
 void RtlCompareMemoryUlong()
