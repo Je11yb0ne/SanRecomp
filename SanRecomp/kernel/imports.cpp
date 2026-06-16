@@ -4730,6 +4730,7 @@ void StartVBlankTimer() {
         g_vblankThread = std::thread(VBlankTimerThread);
         printf("[VBlank] Timer started (60Hz)\n");
     }
+	if(g_gpuRingBuffer.interruptCallback==0){g_gpuRingBuffer.interruptCallback=0x822D41E8;g_gpuRingBuffer.interruptUserData=0;}
 }
 
 void StopVBlankTimer() {
