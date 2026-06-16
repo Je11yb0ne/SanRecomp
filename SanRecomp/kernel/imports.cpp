@@ -4701,21 +4701,22 @@ static std::thread g_vblankThread;
 
 // Forward declaration for main loop entry
 
+uint32_t g_vblank_pcr = 0;
+uint32_t g_vblank_stack = 0;
+
 void FireVBlankCallback() {
     if (g_gpuRingBuffer.interruptCallback != 0) {
-        // Create a temporary context to call the guest callback
-        PPCContext ctx{}; ctx.r1.u64=0x10000000; /* temp stack */ ctx.r13.u64=0x82000000; /* TLS base */ ctx.r3.u32=g_gpuRingBuffer.interruptUserData;
-        ctx.r4.u32 = 0;  // Interrupt type 0 = VBlank
-        
-        auto* callbackFunc = g_memory.FindFunction(g_gpuRingBuffer.interruptCallback);
-        if (callbackFunc) {
-            callbackFunc(ctx, g_memory.base);
+        auto* cb = g_memory.FindFunction(g_gpuRingBuffer.interruptCallback);
+        if (cb) {
+            PPCContext ctx{};
+            if (g_vblank_pcr) { ctx.r13.u64 = g_vblank_pcr; ctx.r1.u64 = g_vblank_stack; }
+            else { ctx.r1.u64 = 0x10000000; ctx.r13.u64 = 0x82000000; }
+            ctx.r3.u32 = g_gpuRingBuffer.interruptUserData;
+            ctx.r4.u32 = 0;
+            cb(ctx, g_memory.base);
         }
-        
-        // VBlank callback complete - game code handles render loop naturally
     }
 }
-
 void VBlankTimerThread() {
     while (g_vblankTimerRunning.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60Hz

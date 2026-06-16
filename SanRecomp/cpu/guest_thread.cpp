@@ -311,6 +311,12 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
     // when the 8GB VirtualAlloc at 0x100000000 fails and falls back to nullptr.
     VirtualAlloc(g_memory.base, 0x1000, MEM_COMMIT, PAGE_READWRITE);
 
+    // Save a valid PCR and stack for VBlank callback use
+    extern uint32_t g_vblank_pcr;
+    extern uint32_t g_vblank_stack;
+    g_vblank_pcr = ctx.ppcContext.r13.u32;
+    g_vblank_stack = ctx.ppcContext.r1.u32;
+
     // Start VBlank timer unconditionally — fires registered callback
     extern void StartVBlankTimer();
     StartVBlankTimer();
