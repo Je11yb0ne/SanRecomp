@@ -4,6 +4,7 @@
 #include <cpuid.h>
 #endif
 #include <cpu/guest_thread.h>
+#include <thread>
 #include <gpu/video.h>
 #include <kernel/function.h>
 #include <kernel/memory.h>
@@ -490,22 +491,12 @@ int main(int argc, char *argv[])
     LOGN_WARNING(modulePath.string());
     // Video::StartPipelinePrecompilation();
 
-    GuestThread::Start({ entry, 0, 0, 0 }); fprintf(stderr, "[MAIN] PPC entry returned!
-"); fflush(stderr);
-
-    // Keep the process alive — the main PPC entry point (_xstart) is just
-    // initialization. The actual game loop runs on other threads created
-    // during init. We need to pump events and keep the window open.
-    printf("[Main] Entry point returned — entering event loop\n");
-    fflush(stdout);
+    GuestThread::Start({ entry, 0, 0, 0 });
+    printf("[Main] PPC returned, entering event loop\n"); fflush(stdout);
     SDL_Event event;
     while (true) {
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                printf("[Main] SDL_QUIT received — exiting\n");
-                fflush(stdout);
-                return 0;
-            }
+            if (event.type == SDL_QUIT) { printf("[Main] QUIT\n"); fflush(stdout); return 0; }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }

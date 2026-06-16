@@ -8209,3 +8209,32 @@ extern "C" void sub_836408A0_patch(PPCContext& __restrict ctx, uint8_t* base) {
     ctx.r3.s64 = 0;
 }
 void sub_8362A5F0(PPCContext& __restrict ctx, uint8_t* base) { static int n=0; if(++n<=3) printf("[PATCH] sub_8362A5F0 (init) #%d\n",n); }
+
+// VBlank simulator — drives the render loop at 60Hz
+#include <thread>
+#include <atomic>
+static std::atomic<bool> s_vblankRunning{false};
+static std::thread s_vblankThread;
+
+void StartVBlankThread() {
+    if (s_vblankRunning.exchange(true)) return;
+    s_vblankThread = std::thread([]() {
+        printf("[VBlank] Thread started\n"); fflush(stdout);
+        while (s_vblankRunning.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            if (g_gpuRingBuffer.interruptCallback != 0) {
+                static int tick = 0;
+                if (++tick <= 5) printf("[VBlank] Firing 0x%08X tick=%d\n", g_gpuRingBuffer.interruptCallback, tick), fflush(stdout);
+                auto func = g_memory.FindFunction(g_gpuRingBuffer.interruptCallback);
+                if (func) {
+                    PPCContext vctx = *g_ppcContext;
+                    vctx.r3.u32 = g_gpuRingBuffer.interruptUserData;
+                    func(vctx, g_memory.base);
+                }
+            }
+        }
+    });
+}
+
+// Skip lengthy init loop so game reaches render phase quickly
+}
