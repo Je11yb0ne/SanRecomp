@@ -1,0 +1,1 @@
+{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"SessionStart\\\",\\\"additionalContext\\\":\\\"SESSION START CHECKLIST: (1) Read CLAUDE.md (2) Skill(using-superpowers) (3) Skill(karpathy-guidelines) (4) Read GAME_PLAN.md (5) Apply systematic-debugging before fixing anything\\\"}}\""}]}]}}

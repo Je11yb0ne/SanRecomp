@@ -2037,6 +2037,11 @@ void InstallerWizard::Shutdown()
 
 bool InstallerWizard::Run(std::filesystem::path installPath, bool skipGame)
 {
+    // FIXME: Skip installer UI — pipeline setup crashes on Intel D3D12.
+    // Return true to proceed to PPC boot with existing game files.
+    printf("[InstallerWizard] Skipping UI (pipeline not ready), proceeding to PPC boot\n"); fflush(stdout);
+    return true;
+
     g_installPath = installPath;
 
     EmbeddedPlayer::Init();

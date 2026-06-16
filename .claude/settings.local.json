@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where cmake.exe)",
+      "Read(//usr/bin/**)",
+      "Read(//c//**)"
+    ]
+  }
+}
