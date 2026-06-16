@@ -64,21 +64,30 @@
 - PPC 看门狗增强：追踪 r1/r3 寄存器 + 内核调用
   - 诊断结果：r1 静态 = 卡在单个函数内，无内核调用 → 疑似 busy-wait
 
-## Phase 5: rexglue 迁移 — 用 rexglue 重编译 GTA V (NEXT)
+## Phase 5: rexglue 迁移 — PPC 启动调试 (IN PROGRESS)
 **决策 (2026-06-16):** rexglue-sdk v0.8.0 作为主要重编译器，XenonRecomp 保留辅助
 **理由:** 310 import symbols vs 50, built-in Runtime, 5.6M instruction analysis
-**任务:**
-1. 完成 `rexglue codegen` 生成完整 C++ 代码
-2. 分析生成的 kernel 实现，对比现有 imports.cpp
-3. 解决 PPC busy-wait 问题（rexglue 可能有不同处理方式）
-4. 集成 rexglue Runtime 替换 Plume/SDL 层（可选，视复杂度）
+**当前阻塞:** PPC 代码在 `sub_8363E1D8` 中忙等（未初始化链表遍历）
 
-## Phase Progress Log
+## Phase 5 Progress Log
 
-### 2026-06-16 (today)
+### 2026-06-16 (session 2 — PPC boot debugging)
+- ✅ CI workflow 文件修复：LibertyRecomp → SanRecomp（防止 GitHub Actions 邮件轰炸）
+- ✅ ExGetXConfigSetting(2,2) 返回值修复：0x1000 → 0x300 (GTA V 校验兼容)
+- ✅ 空页哨兵初始化：地址 0 的链表遍历不再无限循环 (memory.cpp)
+- ✅ 函数表保护移除：GTA V 需要写入 0x83DC0000+ 范围的运行时数据
+- ✅ KeBugCheckEx/KeBugCheck 改为日志记录而非崩溃
+- ✅ RtlEnterCriticalSection/RtlLeaveCriticalSection null 指针保护
+- 🔄 当前阻塞：sub_8363E1D8 链表遍历忙等 (LR=0x8363E1E0, r1=0xFFFFFE80)
+- 📊 游戏已可运行多个线程、调用多个内核函数、在遇到严重错误时主动调用 KeBugCheckEx(0xF4)
+- 💡 根本问题：XenonRecomp 重编译的代码依赖已初始化的数据结构（BSS/data sections），但 PPC 内存是从零开始的
+
+### 2026-06-16 (previous session)
 - ✅ 最小 D3D12 clear+present — 窗口显示紫色
 - ✅ BeginCommandList null-guard 修复 — 跳过 descriptor heap 绑定
 - ✅ 直接渲染到 swap chain backbuffer — 跳过中介纹理 + gamma correction
+
+## Phase Progress Log (continued)
 - ✅ PPC 看门狗 + 内核调用追踪系统
 - ✅ 6 个参考项目下载到 refs/
 - ✅ rexglue-sdk v0.8.0 分析 GTA V XEX 成功

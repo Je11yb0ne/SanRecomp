@@ -40,29 +40,26 @@ Memory::Memory()
     // Do not install a null-page guard in that case.
 #endif
 
+    // Initialize null-page sentinel to prevent infinite loops in memory allocator
+    // linked-list traversal when encountering uninitialized pools.
+    {
+        *(volatile uint32_t*)(base + 0x00) = __builtin_bswap32(0x10);
+        *(volatile uint32_t*)(base + 0x10) = __builtin_bswap32(0x10);
+        *(volatile uint32_t*)(base + 0x14) = __builtin_bswap32(0x10);
+        *(volatile uint16_t*)(base + 0x08) = __builtin_bswap16(0xFFFF);
+    }
+
     for (size_t i = 0; PPCFuncMappings[i].guest != 0; i++)
     {
         if (PPCFuncMappings[i].host != nullptr)
             InsertFunction(PPCFuncMappings[i].guest, PPCFuncMappings[i].host);
     }
 
-    // Protect the recomp function lookup table from guest writes.
-    // If the game overwrites these host function pointers, it can lead to crashes that look like
-    // invalid indirect branches / pointer-authentication failures on arm64e.
-    constexpr size_t kPageSize = 0x1000;
-    constexpr size_t kFuncTableOffset = PPC_IMAGE_BASE + PPC_IMAGE_SIZE;
-    constexpr size_t kFuncTableSize = (PPC_CODE_SIZE * 2) + sizeof(PPCFunc*);
-    const size_t protectBegin = AlignDown(kFuncTableOffset, kPageSize);
-    const size_t protectEnd = AlignUp(kFuncTableOffset + kFuncTableSize, kPageSize);
-    if (protectEnd > protectBegin)
-    {
-#ifdef _WIN32
-        DWORD oldProtect{};
-        VirtualProtect(base + protectBegin, protectEnd - protectBegin, PAGE_READONLY, &oldProtect);
-#else
-        mprotect(base + protectBegin, protectEnd - protectBegin, PROT_READ);
-#endif
-    }
+    // NOTE: Function table protection DISABLED for GTA V.
+    // The game writes to memory beyond the XEX image (0x83DC0000+) for
+    // runtime data (heaps, thread stacks, etc.). Original LibertyRecomp
+    // protected this region as read-only to guard against host pointer
+    // corruption, but GTA V needs full read/write access.
 }
 
 void* MmGetHostAddress(uint32_t ptr)

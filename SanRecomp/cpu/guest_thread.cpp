@@ -6,6 +6,7 @@
 #include <kernel/function.h>
 #include "ppc_context.h"
 #include <SDL.h>
+#include "crash_guard.h"
 
 // Global PPC context pointer (current thread)
 PPCContext* g_ppcContext = nullptr;
@@ -280,9 +281,10 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
                 tick++;
                 uint32_t currentR1 = ctx.ppcContext.r1.u32;
                 uint32_t currentR3 = ctx.ppcContext.r3.u32;
+                uint32_t currentLR = ctx.ppcContext.lr;
                 bool r1Changed = (currentR1 != lastR1);
-                printf("[PPC-Watchdog] tick=%u r1=0x%08X r3=0x%08X %s\n",
-                    tick, currentR1, currentR3,
+                printf("[PPC-Watchdog] tick=%u r1=0x%08X r3=0x%08X lr=0x%08X %s\n",
+                    tick, currentR1, currentR3, currentLR,
                     r1Changed ? "(stack moving)" : "(STACK STATIC - may be stuck)");
                 fflush(stdout);
                 lastR1 = currentR1;
@@ -290,6 +292,7 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
         }
     });
 
+    ScopedCrashGuard crashGuard;
     func(ctx.ppcContext, g_memory.base);
 
     ppcRunning.store(false);

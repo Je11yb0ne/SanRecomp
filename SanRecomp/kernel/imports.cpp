@@ -2963,7 +2963,7 @@ uint32_t ExGetXConfigSetting(uint16_t Category, uint16_t Setting, void* Buffer, 
             {
                 // XCONFIG_SECURED_AV_REGION
                 case 0x0002:
-                    data[0] = ByteSwap(0x00001000); // USA/Canada
+                    data[0] = ByteSwap(0x00000300); // GTA V compatible — (0x300 & 0xFF00) == 0x300
                     break;
 
                 default:
@@ -4073,6 +4073,10 @@ uint32_t KeSetAffinityThread(uint32_t Thread, uint32_t Affinity, be<uint32_t>* l
 void RtlLeaveCriticalSection(XRTL_CRITICAL_SECTION* cs)
 {
     // printf("RtlLeaveCriticalSection");
+    if (!cs) {
+        printf("[RtlLeaveCriticalSection] NULL cs!\n"); fflush(stdout);
+        return;
+    }
     cs->RecursionCount = cs->RecursionCount - 1;
 
     if (cs->RecursionCount != 0)
@@ -4088,7 +4092,15 @@ void RtlEnterCriticalSection(XRTL_CRITICAL_SECTION* cs)
     static int s_count = 0;
     static int s_waitCount = 0;
     ++s_count;
-    
+
+    // Guard against uninitialized memory: cs can be null when
+    // game data structures haven't been fully set up yet
+    if (!cs) {
+        printf("[RtlEnterCriticalSection] NULL cs! s_count=%d\n", s_count);
+        fflush(stdout);
+        return;
+    }
+
     uint32_t thisThread = g_ppcContext->r13.u32;
     assert(thisThread != NULL);
 
@@ -4151,7 +4163,17 @@ void RtlFillMemoryUlong()
 
 void KeBugCheckEx()
 {
-    __builtin_debugtrap();
+    auto& ctx = *GetPPCContext();
+    printf("[KeBugCheckEx] BugCheck 0x%08llX (r4=0x%08llX r5=0x%08llX r6=0x%08llX) lr=0x%08llX\n",
+        (unsigned long long)ctx.r3.u64,
+        (unsigned long long)ctx.r4.u64,
+        (unsigned long long)ctx.r5.u64,
+        (unsigned long long)ctx.r6.u64,
+        (unsigned long long)ctx.lr);
+    fflush(stdout);
+    // Don't crash — let the game continue. On real Xbox 360 this would
+    // halt the system, but we want to see what happens next.
+    // __builtin_debugtrap();
 }
 
 uint32_t KeGetCurrentProcessType()
@@ -4721,7 +4743,12 @@ void VdEnableDisableClockGating()
 
 void KeBugCheck()
 {
-    __builtin_debugtrap();
+    auto& ctx = *GetPPCContext();
+    printf("[KeBugCheck] BugCheck called! r3=0x%08llX r4=0x%08llX lr=0x%08llX\n",
+        (unsigned long long)ctx.r3.u64,
+        (unsigned long long)ctx.r4.u64,
+        (unsigned long long)ctx.lr);
+    fflush(stdout);
 }
 
 void KeLockL2()
