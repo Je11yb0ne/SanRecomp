@@ -3586,7 +3586,73 @@ void Video::WaitOnSwapChain()
 static bool g_shouldPrecompilePipelines;
 static std::atomic<bool> g_executedCommandList;
 
-void Video::Present() 
+// Minimal frame prepare + present cycle for VBlank-driven rendering.
+// Acquires swap chain backbuffer, clears it, and presents — bypassing
+// the full render command processor (which requires pipeline setup).
+void Video::PrepareFrameAndPresent()
+{
+    static int frameCount = 0;
+    frameCount++;
+
+    // Check/resize swap chain and acquire backbuffer
+    if (!g_swapChainValid)
+    {
+        if (!g_swapChain->resize()) return;
+        g_swapChainValid = true;
+    }
+
+    g_swapChainValid = g_swapChain->acquireTexture(g_acquireSemaphores[g_frame].get(), &g_backBufferIndex);
+    if (!g_swapChainValid) return;
+
+    auto swapChainTex = g_swapChain->getTexture(g_backBufferIndex);
+    if (!swapChainTex) return;
+
+    // Set up backbuffer if needed
+    if (!g_backBuffer) {
+        g_backBufferHolder = std::make_unique<GuestSurface>(ResourceType::RenderTarget);
+        g_backBuffer = g_backBufferHolder.get();
+        g_backBuffer->width = 1280;
+        g_backBuffer->height = 720;
+        g_backBuffer->format = BACKBUFFER_FORMAT;
+        g_backBuffer->textureHolder = g_device->createTexture(
+            RenderTextureDesc::Texture2D(1, 1, 1, BACKBUFFER_FORMAT,
+                RenderTextureFlag::RENDER_TARGET));
+    }
+    g_backBuffer->texture = swapChainTex;
+    g_backBuffer->layout = RenderTextureLayout::PRESENT;
+
+    // Minimal command list: clear swap chain backbuffer
+    auto& cmdList = g_commandLists[g_frame];
+    cmdList->begin();
+    cmdList->resetQueryPool(g_queryPools[g_frame].get(), 0, NUM_QUERIES);
+
+    cmdList->barriers(RenderBarrierStage::GRAPHICS,
+        RenderTextureBarrier(swapChainTex, RenderTextureLayout::COLOR_WRITE));
+
+    RenderFramebufferDesc fbDesc;
+    fbDesc.colorAttachments = const_cast<const RenderTexture**>(&swapChainTex);
+    fbDesc.colorAttachmentsCount = 1;
+    auto framebuffer = g_device->createFramebuffer(fbDesc);
+    cmdList->setFramebuffer(framebuffer.get());
+    cmdList->clearColor(0, RenderColor(0.1f, 0.0f, 0.2f, 1.0f));
+
+    cmdList->barriers(RenderBarrierStage::GRAPHICS,
+        RenderTextureBarrier(swapChainTex, RenderTextureLayout::PRESENT));
+
+    cmdList->end();
+    g_queue->executeCommandLists(cmdList.get(), g_commandFences[g_frame].get());
+    g_queue->waitForCommandFence(g_commandFences[g_frame].get());
+
+    // Present
+    g_swapChain->present(g_backBufferIndex, nullptr, 0);
+
+    if (frameCount <= 5 || frameCount % 60 == 0) {
+        printf("[PrepFrame] Frame #%d prepared + presented\n", frameCount);
+        fflush(stdout);
+    }
+}
+
+void Video::Present()
 {
     // MarathonRecomp-style: First Present = transition to Runtime phase
     // This enables proper synchronization (fail-open during init, proper waits after)

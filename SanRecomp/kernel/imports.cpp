@@ -4751,15 +4751,15 @@ void FireVBlankCallback() {
                     fflush(stdout);
                 }
             }
-            // Directly call VdSwap after callback to ensure frame presentation
-            extern void VdSwap();
+            // Prepare and present a frame (minimal clear+present cycle)
+            extern void PrepareFrameAndPresent();
             static int vblankSwapCount = 0;
             vblankSwapCount++;
-            if (vblankSwapCount <= 3 || vblankSwapCount % 60 == 0) {
-                printf("[VBlank] Calling VdSwap directly (#%d)\n", vblankSwapCount);
+            if (vblankSwapCount <= 5 || vblankSwapCount % 60 == 0) {
+                printf("[VBlank] PrepareAndPresent (#%d)\n", vblankSwapCount);
                 fflush(stdout);
             }
-            VdSwap();
+            Video::PrepareFrameAndPresent();
         } else if (fireCount <= 3) {
             printf("[VBlank-Fire] #%d cb=0x%08X NOT FOUND in dispatch table\n",
                 fireCount, g_gpuRingBuffer.interruptCallback);

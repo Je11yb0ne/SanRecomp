@@ -31,6 +31,7 @@ struct Video
     static bool CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry);
     static void WaitOnSwapChain();
     static void Present();
+    static void PrepareFrameAndPresent();  // Minimal clear+present cycle for VBlank
     static void StartPipelinePrecompilation();
     static void WaitForGPU();
     static void ComputeViewportDimensions();
