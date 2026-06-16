@@ -1933,27 +1933,38 @@ static void BeginCommandList()
 
     if (g_swapChainValid)
     {
-        uint32_t width = Video::s_viewportWidth;
-        uint32_t height = Video::s_viewportHeight;
-
-        if (g_intermediaryBackBufferTextureWidth != width ||
-            g_intermediaryBackBufferTextureHeight != height)
+        // Minimal mode: no pipeline layout → render directly to swap chain backbuffer
+        // (avoids intermediary texture + gamma correction copy which needs shaders)
+        if (g_pipelineLayout == nullptr)
         {
-            if (g_intermediaryBackBufferTextureDescriptorIndex == NULL)
-                g_intermediaryBackBufferTextureDescriptorIndex = g_textureDescriptorAllocator.allocate();
-
-            Video::WaitForGPU(); // Fine to wait for GPU, this'll only happen during resize.
-
-            g_intermediaryBackBufferTexture = g_device->createTexture(RenderTextureDesc::Texture2D(width, height, 1, BACKBUFFER_FORMAT, RenderTextureFlag::RENDER_TARGET));
-            g_textureDescriptorSet->setTexture(g_intermediaryBackBufferTextureDescriptorIndex, g_intermediaryBackBufferTexture.get(), RenderTextureLayout::SHADER_READ);
-
-            g_intermediaryBackBufferTextureWidth = width;
-            g_intermediaryBackBufferTextureHeight = height;
-
-            g_backBuffer->framebuffers.clear();
+            auto swapChainTex = g_swapChain->getTexture(g_backBufferIndex);
+            g_backBuffer->texture = swapChainTex;
+            g_backBuffer->layout = RenderTextureLayout::PRESENT;
         }
+        else
+        {
+            uint32_t width = Video::s_viewportWidth;
+            uint32_t height = Video::s_viewportHeight;
 
-        g_backBuffer->texture = g_intermediaryBackBufferTexture.get();
+            if (g_intermediaryBackBufferTextureWidth != width ||
+                g_intermediaryBackBufferTextureHeight != height)
+            {
+                if (g_intermediaryBackBufferTextureDescriptorIndex == NULL)
+                    g_intermediaryBackBufferTextureDescriptorIndex = g_textureDescriptorAllocator.allocate();
+
+                Video::WaitForGPU(); // Fine to wait for GPU, this'll only happen during resize.
+
+                g_intermediaryBackBufferTexture = g_device->createTexture(RenderTextureDesc::Texture2D(width, height, 1, BACKBUFFER_FORMAT, RenderTextureFlag::RENDER_TARGET));
+                g_textureDescriptorSet->setTexture(g_intermediaryBackBufferTextureDescriptorIndex, g_intermediaryBackBufferTexture.get(), RenderTextureLayout::SHADER_READ);
+
+                g_intermediaryBackBufferTextureWidth = width;
+                g_intermediaryBackBufferTextureHeight = height;
+
+                g_backBuffer->framebuffers.clear();
+            }
+
+            g_backBuffer->texture = g_intermediaryBackBufferTexture.get();
+        }
     }
     else
     {
@@ -2413,29 +2424,49 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
             CheckSwapChain();
             printf("[Video] CheckSwapChain done, swapChainValid=%d\n",
                 g_swapChainValid); fflush(stdout);
-            printf("[Video] Calling BeginCommandList...\n"); fflush(stdout);
-            BeginCommandList();
-            printf("[Video] BeginCommandList done\n"); fflush(stdout);
-
-            // Initial clear+present — show purple immediately, don't wait for PPC Present()
-            printf("[Video] Performing initial clear+present...\n"); fflush(stdout);
+            // Use swap chain backbuffer directly (skip intermediary + gamma correction
+            // which needs pipeline/shaders that crash on Intel D3D12)
             {
+                auto swapChainTex = g_swapChain->getTexture(g_backBufferIndex);
+                printf("[Video] Swap chain backbuffer texture: %p\n", (void*)swapChainTex); fflush(stdout);
+
+                // Point backbuffer directly at swap chain texture (not intermediary)
+                // This avoids the need for ProcExecuteCommandList's gamma correction copy
+                g_backBuffer->texture = swapChainTex;
+                g_backBuffer->layout = RenderTextureLayout::PRESENT;
+
+                // Start command list, clear swap chain backbuffer directly
                 auto& cmdList = g_commandLists[g_frame];
-                // Create framebuffer for backbuffer's intermediary texture
+                cmdList->begin();
+                cmdList->resetQueryPool(g_queryPools[g_frame].get(), 0, NUM_QUERIES);
+                cmdList->writeTimestamp(g_queryPools[g_frame].get(), 0);
+
+                // Transition swap chain texture from PRESENT to COLOR_WRITE for clear
+                cmdList->barriers(RenderBarrierStage::GRAPHICS,
+                    RenderTextureBarrier(swapChainTex, RenderTextureLayout::COLOR_WRITE));
+
+                // Create framebuffer and clear to dark purple
                 RenderFramebufferDesc fbDesc;
-                fbDesc.colorAttachments = const_cast<const RenderTexture**>(&g_renderTarget->texture);
+                fbDesc.colorAttachments = const_cast<const RenderTexture**>(&swapChainTex);
                 fbDesc.colorAttachmentsCount = 1;
                 auto framebuffer = g_device->createFramebuffer(fbDesc);
                 cmdList->setFramebuffer(framebuffer.get());
-                // Clear to dark purple (same as Present's heartbeat clear)
                 cmdList->clearColor(0, RenderColor(0.1f, 0.0f, 0.2f, 1.0f));
-                // End, execute, wait
+
+                // Transition back to PRESENT
+                cmdList->barriers(RenderBarrierStage::GRAPHICS,
+                    RenderTextureBarrier(swapChainTex, RenderTextureLayout::PRESENT));
+
                 cmdList->end();
                 g_queue->executeCommandLists(cmdList.get(), g_commandFences[g_frame].get());
                 g_queue->waitForCommandFence(g_commandFences[g_frame].get());
-                // Present the backbuffer
                 g_swapChain->present(g_backBufferIndex, nullptr, 0);
-                printf("[Video] Initial present done!\n"); fflush(stdout);
+                printf("[Video] Initial clear+present done!\n"); fflush(stdout);
+
+                // Ensure render thread's BeginCommandList won't override our backbuffer setup
+                // When g_pipelineLayout is null, ProcExecuteCommandList takes the else
+                // branch (just PRESENT barrier), avoiding the gamma correction crash.
+                g_readyForCommands = true;
             }
         }
     }

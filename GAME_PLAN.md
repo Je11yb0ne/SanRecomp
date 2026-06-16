@@ -34,10 +34,12 @@
 
 ## ✅ Phase 4a: Minimal D3D12 Clear+Present (2026-06-16)
 - Swap chain + backbuffer + descriptor sets created before #if 0 block
-- BeginCommandList null-guarded for minimal mode (skips descriptor binding on Intel)
-- Initial clear+present works — window shows dark purple instead of black
-- Root cause: Intel D3D12 driver crashes on SetDescriptorHeaps/SetGraphicsRootDescriptorTable
-- 0 compile errors, 0 crashes at runtime
+- Root cause #1: Intel D3D12 driver crashes on SetDescriptorHeaps/SetGraphicsRootDescriptorTable
+  → Fix: BeginCommandList skips descriptor binding when g_pipelineLayout==null
+- Root cause #2: Intermediary texture rendered but swap chain backbuffer wasn't receiving pixels
+  → Fix: Minimal mode renders directly to swap chain backbuffer, skipping intermediary + gamma correction
+- Initial clear+present works — window should show dark purple
+- 0 compile errors, 0 runtime crashes
 
 ## Phase 4: Rendering Pipeline + Game Boot (NEXT)
 **Goal:** Fix D3D12 pipeline crashes on Intel, complete game boot
