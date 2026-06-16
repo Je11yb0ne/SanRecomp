@@ -161,3 +161,27 @@
 
 ### Past sessions
 - Phase 1-6: see git log for details
+
+### 2026-06-16 Session — GOAL PROGRESS: game reaches clean exit
+- ✅ All KeBugCheck/KeBugCheckEx silenced (0 occurrences)
+- ✅ RTL string stubs properly implemented (no LOG spam)
+- ✅ _xstart runs to completion, exits cleanly (exit code 0)
+- ✅ 10+ function table patches + 10+ weak symbol overrides
+- ✅ Stack increased to 4MB prevents asset processing crashes
+- ✅ rexglue wiki studied and documented in CLAUDE.md
+
+KEY DISCOVERY: _xstart is NOT the rendering entry point.
+It's the INIT function that either exits via XamLoaderTerminateTitle
+(flag=0, normal) or enters argument parsing (flag≠0, crashes).
+The game's rendering loop must be started by a different thread
+or through XamTaskSchedule / module launch mechanism.
+
+Goal criteria:
+1. ✅ LR diversified beyond 0x836411E0
+2. ✅ INDIRECT-CALL skips minimal
+3. ✅ KeBugCheck/KeBugCheckEx silenced
+4. ❌ Rendering functions — not called because _xstart exits
+5. ❌ Game image — needs rendering entry point found
+
+NEXT: Identify how GTA V starts its render loop (likely via
+XamTaskSchedule or a thread created during init).
