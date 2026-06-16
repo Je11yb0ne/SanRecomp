@@ -4195,6 +4195,16 @@ uint32_t KeGetCurrentProcessType()
 
 
 
+
+
+// Strong override for sub_83196A28 — stuck in data processing loop.
+void sub_83196A28(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83196A28 #%d\n",n);
+}
+// Strong override for sub_83195350 — stuck in data processing loop.
+void sub_83195350(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83195350 #%d (r11_loop_ctr_from_0x8385D29C)\n",n);
+}
 // Strong override for sub_8255DC60 — part of crash chain via sub_8255DC48.
 void sub_8255DC60(PPCContext& __restrict ctx, uint8_t* base) {
     static int n=0; if(++n<=3) printf("[PATCH] sub_8255DC60 #%d (r3=%lld r4=%lld)\n",n,(long long)ctx.r3.u64,(long long)ctx.r4.u64);

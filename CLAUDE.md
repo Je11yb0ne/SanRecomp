@@ -36,10 +36,19 @@ SanRecomp is a static recompilation project porting GTA V (Xbox 360) to PC. Fork
   - 自动生成函数导出、异常处理、模板脚手架
 - XenonRecomp 保留作为辅助工具
 
-**Current Phase: 5 — rexglue 迁移 + PPC 启动修复**
-- SanRecomp.exe 可运行，D3D12 紫色窗口 ✅
-- PPC 追踪发现 KeGetCurrentProcessType 被调用
-- 下一步：用 rexglue 完整重编译 GTA V，对比现有代码
+**Current Phase: 7 — PPC 启动调试 → 游戏初始化**
+- SanRecomp.exe 稳定运行 30+ 秒无崩溃 ✅
+- 忙等/崩溃/栈溢出全部修复 ✅
+- 回调分发器、TLS 递归、内存分配全部工作 ✅
+- 游戏到达网络初始化、多线程正常创建 ✅
+- 当前：游戏在轮询循环中等待内核事件（LR=0x8319537C）
+- 下一步：补全内核事件/同步机制 → 让游戏进入主循环 → 渲染
+
+**⚠️ 工作纪律（每次必读）：**
+- **绝不主动停下来** — 除非遇到需要用户决策的硬阻塞
+- **每阶段结束必须更新 CLAUDE.md + GAME_PLAN.md**
+- **每次会话开始必须读取 CLAUDE.md + GAME_PLAN.md**
+- **涉及代码修改的操作不要问我，直接做**
 
 ## Build Commands
 
@@ -236,8 +245,8 @@ Key differences from XenonRecomp:
 
 ## Next Session Starting Points
 
-1. ⭐ **rexglue 集成** — 用 rexglue 生成的 200+ PPC 文件替换 XenonRecomp 的 546 文件。rexglue 有完整的 kernel Runtime 和 310 导入实现，可解决零初始化内存导致的循环/崩溃问题。生成文件在 `refs/rexglue-sdk/rexglue-bin/win-amd64/test_gta5/generated/default/`
-2. **补全缺失的内核导入** — 对比 rexglue 的 310 导入 vs 当前 ~100 imports，补全关键函数
-3. **PPC 忙等定位** — 诊断剩余的忙等（sub_8363E1D8, sub_8363E870 等），用强符号覆盖或内存初始化
+1. ⭐ **补全内核事件/同步机制** — 游戏在 LR=0x8319537C 处于轮询等待，需要完善 `KeSetEvent`/`KeWaitForSingleObject`/`NtCreateEvent` 等内核同步原语，让等待的事件能被触发
+2. **rexglue 内核移植** — 从 rexglue 移植更多内核实现到 imports.cpp（rexglue 有完整的 xboxkrnl 实现），特别是 `KeInitializeEvent`、`KePulseEvent`、`KeSetTimerEx` 等
+3. **让渲染管线就绪** — 一旦游戏进入主循环，需要 D3D12 完整管线工作（当前只有最小 clear+present）
 4. **Build SDL_mixer** — 配置 SDL_mixer cmake 构建，移除 stubs
 5. **Run XenosRecomp** — 转换 Xbox 360 .fxc shaders 到 DXIL
