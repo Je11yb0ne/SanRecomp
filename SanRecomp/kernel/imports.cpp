@@ -4154,6 +4154,7 @@ void KeBugCheckEx()
 
 uint32_t KeGetCurrentProcessType()
 {
+    printf("[KERNEL-TRACE] KeGetCurrentProcessType called\n"); fflush(stdout);
     return 1;
 }
 
@@ -4200,6 +4201,7 @@ void KfAcquireSpinLock(uint32_t* spinLock)
 
 uint64_t KeQueryPerformanceFrequency()
 {
+    printf("[KERNEL-TRACE] KeQueryPerformanceFrequency called\n"); fflush(stdout);
     return 49875000;
 }
 
@@ -5257,6 +5259,7 @@ void NtFlushBuffersFile()
 
 void KeQuerySystemTime(be<uint64_t>* time)
 {
+    printf("[KERNEL-TRACE] KeQuerySystemTime called\n"); fflush(stdout);
     // Pump SDL events periodically to prevent window from becoming unresponsive
     PumpSdlEventsIfNeeded();
     
