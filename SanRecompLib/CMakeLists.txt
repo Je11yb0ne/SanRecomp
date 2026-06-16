@@ -97,4 +97,5 @@ add_library(SanRecompLib
 
 target_include_directories(SanRecompLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(SanRecompLib PRIVATE "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/simde")
+target_compile_definitions(SanRecompLib PRIVATE PPC_MMIO_DEBUG)
 target_precompile_headers(SanRecompLib PUBLIC "ppc/ppc_recomp_shared.h")

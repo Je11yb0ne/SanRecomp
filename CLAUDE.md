@@ -28,6 +28,12 @@ SanRecomp is a static recompilation project porting GTA V (Xbox 360) to PC. Fork
 - `refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe`
 - 分析能力远超 XenonRecomp：310 导入，5.6M 指令，10K 代码区域
 - 内置完整 Runtime（D3D12/Vulkan, Audio, Input, ImGui）
+- **关键优势 vs XenonRecomp**:
+  - 内联 MMIO 检查（load/store 宏直接判断地址范围，不依赖 access violation）
+  - Xbox 360 SEH → C++ try/catch（结构化异常映射）
+  - vtable 扫描 + RTTI 恢复虚函数调用
+  - 原生 CRT hooks（malloc/memcpy 可重定向到原生实现）
+  - 自动生成函数导出、异常处理、模板脚手架
 - XenonRecomp 保留作为辅助工具
 
 **Current Phase: 5 — rexglue 迁移 + PPC 启动修复**
