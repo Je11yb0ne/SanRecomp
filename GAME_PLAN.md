@@ -95,7 +95,13 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 - ✅ PrepareFrameAndPresent()：acquire→clear→barriers→execute→present 完整周期
 - ✅ 帧 #1-#5, #60, #120, #180, #240, #300+ 全部成功呈现
 - ✅ VBlank 线程不间断运行，无阻塞无崩溃
-- 🔧 下一步：将游戏渲染内容（PM4 命令/游戏绘制）注入帧管线
+- ✅ **游戏渲染回调 sub_822D41E8 成功执行并调用 VdSwap**（重大突破！）
+- ✅ 原始 PPC 渲染函数运行并通过 `__imp__sub_822D41E8` 调用 VdSwap
+- ⚠️ 渲染回调在 VdSwap 之后崩溃（0xC0000005）— 图形状态结构未初始化
+- ⚠️ 图形初始化链（sub_82989588 → sub_83225C90 → ...）本身崩溃
+- ⚠️ 环形缓冲区仍为空 — 崩溃前未写入 PM4 命令
+- ⚠️ CallbackPtr @ 0x822E1768 = 0x00000000（从未被游戏正确设置）
+- 🔧 下一步：实现缺失的内核服务，或移植 UnleashedRecomp 的 D3D 钩子方法
 
 ### 2026-06-16 (Session — Vulkan 迁移 + 渲染循环)
 - ✅ 研究 refs/ 所有项目渲染后端

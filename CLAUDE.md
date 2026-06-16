@@ -268,12 +268,17 @@ REXGLUE="refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe"
 
 ## Next Session Starting Points
 
-1. ⭐ **打破 0x838871A4 忙等** — 主线程轮询此地址，值在 0x10→0xFFFFFFFF 之间循环。这是 GTA V 内部同步变量。需要：
-   - IDA 分析哪些函数读写此地址
-   - 覆盖导致忙等的函数（如 init loop breakers 未覆盖的路径）
-   - 或实现缺失的内核同步原语（KeInitializeEvent, KeSetEvent, 等）
-2. ⭐ **VBlank 中断 userData 修复** — 当前 interruptUserData=0，导致 sub_822D41E8 的 r31=0，所有状态从零页读取。需要游戏完成 init 后注册真实回调
-3. **全管线崩溃修复** — video.cpp 全管线在空纹理创建时崩溃（0xC0000005），需要调试 plume Vulkan 空纹理创建
-4. **GPU 命令翻译** — 一旦游戏进入渲染循环，需要 PM4 → Vulkan 命令翻译（参考 UnleashedRecomp + rexglue）
-5. **Build SDL_mixer** — 配置 SDL_mixer cmake 构建，移除 stubs
+1. ⭐ **实现缺失的内核同步服务** — 游戏图形初始化需要 `KeInitializeEvent`, `KeSetTimerEx`, `KePulseEvent` 等。
+   当前游戏 init 完成但图形状态未初始化，导致渲染回调崩溃。需要：
+   - 参考 rexglue-sdk 的内核实现（`refs/rexglue-sdk/src/kernel/`）
+   - 参考 UnleashedRecomp 的内核补丁
+   - 优先实现事件相关的函数（KeInitializeEvent, KeSetEvent, KeWaitForSingleObject 增强）
+2. ⭐ **启用 D3D 函数钩子** — video.cpp 中 `#if 0` 的 GUEST_FUNCTION_HOOK 块（~60 个函数）：
+   - CreateTexture, SetRenderState, DrawIndexedPrimitive 等
+   - 这些钩子可将游戏 D3D 调用翻译为 Vulkan 绘制
+   - 参数布局需要在 IDA 中分析或从 rexglue 对比
+3. **图形状态结构分析** — 0x83830000 处期望的结构布局。sub_822D41E8 以各种偏移量（+48, +23760, +22036, +14012, +16968）读取此结构。
+   需要使用 IDA 进行适当的逆向工程以了解字段。
+4. **全管线崩溃修复** — plume Vulkan 空纹理创建崩溃（0xC0000005），需要调试
+5. **PM4 命令扫描增强** — 环形缓冲区当前为空，但一旦游戏开始渲染，我们将需要 PM4→Vulkan 翻译
 5. **Run XenosRecomp** — 转换 Xbox 360 .fxc shaders 到 DXIL
