@@ -36,13 +36,11 @@ SanRecomp is a static recompilation project porting GTA V (Xbox 360) to PC. Fork
   - 自动生成函数导出、异常处理、模板脚手架
 - XenonRecomp 保留作为辅助工具
 
-**Current Phase: 8 — Vulkan 渲染 → 游戏画面 (Goal: 4/5)**
-- SanRecomp.exe 稳定运行，Vulkan 后端 ✅
-- VBlank 60Hz 渲染驱动运行中 ✅
-- 游戏渲染循环已激活（VdSetDisplayMode 被调用） ✅
-- 渲染函数 sub_822D41E8 被 VBlank 调用，LR=0x836DECA8
-- 当前：渲染函数运行中，需到达 VdSwap 完成画面输出
-- 下一步：完善 VBlank 上下文让渲染函数走到 VdSwap
+**Current Phase: 9 — GPU 命令翻译 → 真实游戏画面**
+- Phase 8 目标完成（5/5）：Vulkan + 渲染循环 + VdSwap ✅
+- 画面仍是蓝色：GPU 命令缓冲未被翻译为 Vulkan 绘制
+- 下一步：实现 PM4 命令 → Vulkan 绘制调用翻译
+- 参考：UnleashedRecomp video.cpp (7500+ 行), rexglue graphics/vulkan/
 
 **⚠️ 工作纪律（每次必读）：**
 - **绝不主动停下来** — 除非遇到需要用户决策的硬阻塞
