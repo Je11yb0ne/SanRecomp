@@ -4844,18 +4844,18 @@ static void InitVBlankPCR() {
     printf("[VBlank] PCR initialized at 0x%08X\n", pcrBase);
     fflush(stdout);
 
-    // Initialize graphics state at 0x83830000 (userData for VBlank callback)
-    // Size: 256KB filled with self-referential pointers to prevent null deref
-    // Also initialize the surrounding regions for any cascading dereferences
-    uint32_t gfxBase = 0x83830000;
-    for (uint32_t off = 0; off < 0x40000; off += 4) {
+    // Ensure PPC memory for graphics state is committed
+    // The 8GB VirtualAlloc should be fully committed, but be safe
+    uint32_t gfxBase = 0x83800000;
+    size_t gfxSize = 0x100000; // 1MB
+    VirtualAlloc(g_memory.base + gfxBase, gfxSize, MEM_COMMIT, PAGE_READWRITE);
+
+    // Initialize graphics state at 0x83800000 with self-referential pointers
+    for (uint32_t off = 0; off < gfxSize; off += 4) {
         PPC_STORE_U32(gfxBase + off, gfxBase + off);
     }
-    // Also fill 0x83800000-0x83830000 with self-refs (may be needed by related structures)
-    for (uint32_t off = 0; off < 0x30000; off += 4) {
-        PPC_STORE_U32(0x83800000 + off, 0x83800000 + off);
-    }
-    printf("[VBlank] Graphics state initialized: 0x83800000-0x83870000 (448KB self-refs)\n");
+    printf("[VBlank] Graphics state initialized + committed: 0x%08X-0x%08X (1MB self-refs)\n",
+        gfxBase, gfxBase + (uint32_t)gfxSize);
     fflush(stdout);
 }
 
