@@ -4749,8 +4749,8 @@ void VdSetGraphicsInterruptCallback(uint32_t callback, uint32_t userData)
     
     printf("[VdSetGraphicsInterruptCallback] callback=0x%08X userData=0x%08X\n", callback, userData);
     
-    // DISABLED: Forced VBlank timer - let game run naturally (MarathonRecomp approach)
-    // StartVBlankTimer();
+    // ENABLED: Start VBlank timer when callback is registered
+    StartVBlankTimer();
 }
 
 uint32_t VdInitializeEngines()
@@ -8217,12 +8217,3 @@ void StartVBlankThread(){extern void _VideoPresent();if(s_vblankRunning.exchange
 // sub_8362A5F0 — let game init naturally (VBlank started from main.cpp)
 
 // Init loop breakers — skip functions that loop forever on uninitialized data
-void sub_83626A3C(PPCContext& __restrict ctx, uint8_t* base) {
-    static int n=0; if(++n<=3) printf("[PATCH] sub_83626A3C #%d\n",n);
-}
-void sub_83627808(PPCContext& __restrict ctx, uint8_t* base) {
-    static int n=0; if(++n<=3) printf("[PATCH] sub_83627808 #%d\n",n);
-}
-void sub_836267B0(PPCContext& __restrict ctx, uint8_t* base) {
-    static int n=0; if(++n<=3) printf("[PATCH] sub_836267B0 #%d\n",n);
-}
