@@ -4178,8 +4178,63 @@ void KeBugCheckEx()
 
 uint32_t KeGetCurrentProcessType()
 {
-    printf("[KERNEL-TRACE] KeGetCurrentProcessType called — returning 2 (PROC_GAME)\n"); fflush(stdout);
-    return 2; // PROC_GAME — game processes may need this
+    // Return 0 to match uninitialized process_type field in kernel objects.
+    // The game checks KeGetCurrentProcessType() == *(object+379);
+    // since memory starts zeroed, 0 matches. If we return 2 (PROC_GAME),
+    // the mismatch triggers KeBugCheckEx(0xF4).
+    printf("[KERNEL-TRACE] KeGetCurrentProcessType called — returning 0\n"); fflush(stdout);
+    return 0;
+}
+
+// ============================================================================
+// Strong override for sub_8363E1D8 — linked-list search that loops on
+// uninitialized circular list. Force return r3=1 (success) to break loop.
+// ============================================================================
+static int s_sub_8363E1D8_count = 0;
+void sub_8363E1D8(PPCContext& __restrict ctx, uint8_t* base) {
+    s_sub_8363E1D8_count++;
+    if (s_sub_8363E1D8_count <= 20) {
+        printf("[PATCH] sub_8363E1D8 #%d — returning 1\n", s_sub_8363E1D8_count);
+        fflush(stdout);
+    }
+    ctx.r3.s64 = 1;
+}
+
+// ============================================================================
+// Strong override for sub_8363E870 — game memory allocator.
+// Uses a simple bump allocator within the PPC memory space (base + offset).
+// Allocates from the low range (0x10000000+) to avoid XEX (0x82000000+).
+// This bypasses the game's uninitialized pool entirely.
+// ============================================================================
+#include <atomic>
+static std::atomic<uint32_t> s_ppc_heap{0x10000000u};
+
+void sub_8363E870(PPCContext& __restrict ctx, uint8_t* base) {
+    uint32_t pool = ctx.r3.u32;
+    uint32_t size = ctx.r5.u32;
+
+    if (size == 0) size = 4096;
+    // Cap at 32MB to avoid exhausting PPC memory
+    if (size > 0x02000000) size = 0x02000000;
+
+    uint32_t ppc_addr = s_ppc_heap.fetch_add((size + 0xFFF) & ~0xFFF);
+    // Don't let heap grow into XEX region
+    if (ppc_addr >= 0x70000000) {
+        ctx.r3.s64 = 0;
+        return;
+    }
+
+    // Zero the allocated PPC memory
+    memset(base + ppc_addr, 0, size);
+
+    static int s_count = 0;
+    if (++s_count <= 30) {
+        printf("[PATCH] sub_8363E870 #%d pool=0x%08X size=0x%X → PPC=0x%08X\n",
+            s_count, pool, size, ppc_addr);
+        fflush(stdout);
+    }
+
+    ctx.r3.u64 = ppc_addr;
 }
 
 void RtlCompareMemoryUlong()
