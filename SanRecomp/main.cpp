@@ -4,7 +4,6 @@
 #include <cpuid.h>
 #endif
 #include <cpu/guest_thread.h>
-#include <thread>
 #include <gpu/video.h>
 #include <kernel/function.h>
 #include <kernel/memory.h>
@@ -492,14 +491,8 @@ int main(int argc, char *argv[])
     // Video::StartPipelinePrecompilation();
 
     GuestThread::Start({ entry, 0, 0, 0 });
-    printf("[Main] PPC returned, entering event loop\n"); fflush(stdout);
-    SDL_Event event;
-    while (true) {
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) { printf("[Main] QUIT\n"); fflush(stdout); return 0; }
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
-    }
+
+    return 0;
 }
 
 GUEST_FUNCTION_STUB(__imp__vsprintf);
