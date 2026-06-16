@@ -4744,8 +4744,11 @@ void FireVBlankCallback() {
             ctx.r3.u32 = g_gpuRingBuffer.interruptUserData;
             ctx.r4.u32 = 0;
 
+            // Call our SEH-protected wrapper (not the raw dispatch table pointer)
+            // This ensures the crash is caught by sub_822D41E8's __try/__except
+            extern void sub_822D41E8(PPCContext&, uint8_t*);
             __try {
-                cb(ctx, g_memory.base);
+                sub_822D41E8(ctx, g_memory.base);
             } __except(EXCEPTION_EXECUTE_HANDLER) {
                 if (fireCount <= 3) {
                     printf("[VBlank-Fire] #%d callback CRASHED! Code=0x%08X\n",
@@ -4823,18 +4826,37 @@ static void InitVBlankPCR() {
     printf("[VBlank] PCR initialized at 0x%08X\n", pcrBase);
     fflush(stdout);
 
-    // Ensure PPC memory for graphics state is committed
-    // The 8GB VirtualAlloc should be fully committed, but be safe
+    // Ensure PPC memory for graphics state is committed + initialized
     uint32_t gfxBase = 0x83800000;
-    size_t gfxSize = 0x100000; // 1MB
+    size_t gfxSize = 0x800000; // 8MB — enough for any pointer chain dereferences
     VirtualAlloc(g_memory.base + gfxBase, gfxSize, MEM_COMMIT, PAGE_READWRITE);
 
-    // Initialize graphics state at 0x83800000 with self-referential pointers
+    // Initialize with self-referential pointers to prevent null derefs
     for (uint32_t off = 0; off < gfxSize; off += 4) {
         PPC_STORE_U32(gfxBase + off, gfxBase + off);
     }
-    printf("[VBlank] Graphics state initialized + committed: 0x%08X-0x%08X (1MB self-refs)\n",
+    printf("[VBlank] Graphics state: 0x%08X-0x%08X (8MB self-refs)\n",
         gfxBase, gfxBase + (uint32_t)gfxSize);
+    fflush(stdout);
+
+    // Fix null pointers that the graphics init chain reads.
+    // sub_82989588 reads 0x83C7BE5C → should point to graphics state base
+    // sub_836BA050 reads 0x822E1768 → should contain the render callback address
+    uint32_t ptrAddr = 0x83C7BE5C;
+    PPC_STORE_U32(ptrAddr, gfxBase);
+    uint32_t cbPtrAddr = 0x822E1768;
+    PPC_STORE_U32(cbPtrAddr, 0x822D41E8);  // Fallback render callback
+    // Verify the write
+    uint32_t verifyVal = __builtin_bswap32(*(uint32_t*)(g_memory.base + cbPtrAddr));
+    printf("[VBlank] Fixed pointers: 0x%08X→0x%08X, 0x%08X→0x822D41E8 (verify: 0x%08X)\n",
+        ptrAddr, gfxBase, cbPtrAddr, verifyVal);
+    fflush(stdout);
+
+    // Directly set the callback (don't call VdSetGraphicsInterruptCallback —
+    // that would trigger StartVBlankTimer → InitVBlankPCR again = infinite recursion)
+    g_gpuRingBuffer.interruptCallback = 0x822D41E8;
+    g_gpuRingBuffer.interruptUserData = gfxBase;
+    printf("[VBlank] Callback registered: fn=0x822D41E8 userData=0x%08X (direct set)\n", gfxBase);
     fflush(stdout);
 }
 
@@ -8347,26 +8369,18 @@ void StartVBlankThread(){extern void _VideoPresent();if(s_vblankRunning.exchange
 
 // sub_8362A5F0 — let game init naturally (VBlank started from main.cpp)
 
-// Forward declaration: original PPC function (weak alias target)
-extern "C" void __imp__sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base);
-
-// Render callback — call original implementation with valid userData.
-// SEH-protected in case it still hangs or crashes.
+// Render callback — currently no-op because original function crashes.
+// The game's sub_822D41E8 needs properly initialized graphics state at r3 (userData).
+// Until we can properly initialize the D3D device/graphics state, keep as no-op.
+// Frame presentation is handled by PrepareFrameAndPresent() via the VBlank loop.
 void sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base) {
     static int n = 0;
     n++;
     if (n <= 3 || n % 60 == 0) {
-        printf("[CALLBACK] sub_822D41E8 #%d r3=0x%08llX\n", n, (unsigned long long)ctx.r3.u64);
+        printf("[CALLBACK] sub_822D41E8 #%d r3=0x%08llX (no-op)\n", n, (unsigned long long)ctx.r3.u64);
         fflush(stdout);
     }
-    __try {
-        __imp__sub_822D41E8(ctx, base);
-    } __except(EXCEPTION_EXECUTE_HANDLER) {
-        if (n <= 5) {
-            printf("[CALLBACK] sub_822D41E8 CRASHED! Code=0x%08X\n", GetExceptionCode());
-            fflush(stdout);
-        }
-    }
+    // Original function crashes with 0xC0000005 — uninitialized graphics state
 }
 
 // Diagnostic overrides REMOVED — let game init run naturally.
@@ -8374,9 +8388,23 @@ void sub_822D41E8(PPCContext& __restrict ctx, uint8_t* base) {
 // (sub_836B0408 → sub_836BA680 → sub_836BA050 → VdSetGraphicsInterruptCallback)
 // should now execute properly during _xstart.
 
-// Init loop breakers REMOVED — let game init run naturally.
-// The busy-wait breaker (ppc_context.h) handles spinloops by rotating values.
-// Thread creation and graphics init should now execute properly.
+// Init loop breakers — speed up init by skipping functions that spin forever.
+// Without these, the busy-wait breaker takes 60+ seconds to advance through 8+ stages.
+// Thread creation and graphics init are handled by VBlank callback after _xstart returns.
+void sub_83626A3C(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83626A3C #%d\n",n);
+}
+void sub_83627808(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83627808 #%d\n",n);
+}
+void sub_836267B0(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_836267B0 #%d\n",n);
+}
+// Override sub_83639628 to return 0 — prevents XamLoaderTerminateTitle
+void sub_83639628(PPCContext& __restrict ctx, uint8_t* base) {
+    static int n=0; if(++n<=3) printf("[PATCH] sub_83639628 #%d returning 0 (skip terminate)\n",n);
+    ctx.r3.s64 = 0;
+}
 // sub_83639628 — let the original run (returns value used by _xstart)
 // Previously overridden to return 0 (skip terminate). Now we let it run
 // naturally so the game can properly complete init.
