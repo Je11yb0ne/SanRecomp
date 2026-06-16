@@ -4187,6 +4187,23 @@ uint32_t KeGetCurrentProcessType()
 }
 
 // ============================================================================
+
+// ============================================================================
+// Strong override for sub_83641190 — callback dispatcher.
+// Dispatches callbacks from linked list. Many entries have
+// fn=0xFFFFFFFF (uninitialized), causing 1000+ skips/sec.
+// This override skips dispatch entirely to break the loop.
+// ============================================================================
+static int s_sub_83641190_count = 0;
+void sub_83641190(PPCContext& __restrict ctx, uint8_t* base) {
+    s_sub_83641190_count++;
+    if (s_sub_83641190_count <= 5 || s_sub_83641190_count % 200 == 0) {
+        printf("[PATCH] sub_83641190 #%d (r3=%lld) skipped dispatch\n",
+            s_sub_83641190_count, (long long)ctx.r3.u64);
+        fflush(stdout);
+    }
+}
+
 // Strong override for sub_8363E1D8 — linked-list search that loops on
 // uninitialized circular list. Force return r3=1 (success) to break loop.
 // ============================================================================
