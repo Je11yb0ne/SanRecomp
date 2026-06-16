@@ -60,19 +60,15 @@ static inline uint32_t _ppc_busywait_load32(uint8_t* base, uint32_t addr) {
                 addr, __builtin_bswap32(*(volatile uint32_t*)(base + addr)),
                 __builtin_return_address(0));
             fflush(stdout);
-            // If spinning on low address (null page from uninitialized pool), prepare to break
-            if (addr <= 0x1000) {
-                s_break_next = true;
-            }
+            s_break_next = true;  // break any busy-wait loop
         }
         if (s_counter >= 200 && s_break_next) {
-            // Break infinite linked-list traversal: write self-ref to the address
-            // so the traversal loop sees a node pointing to itself and terminates.
             printf("[BUSY-WAIT] Breaking loop at addr=0x%08X after %u reads\n", addr, s_counter);
             fflush(stdout);
-            // Write a self-referencing pointer to break the traversal.
-            // For addr=0, redirect to a sentinel at 0x10 (bswap32(0)=0 is a no-op).
-            uint32_t write_val = addr ? addr : 0x10;
+            // Write a non-zero value to break flag-polling or linked-list loops.
+            // For addr=0, redirect to sentinel at 0x10 (bswap32(0)=0 is a no-op).
+            // For other addrs, write 1 (like a flag becoming ready).
+            uint32_t write_val = addr ? 1 : 0x10;
             *(volatile uint32_t*)(base + addr) = __builtin_bswap32(write_val);
             s_counter = 0;
             s_last_addr = 0;
@@ -162,7 +158,13 @@ static inline uint32_t _ppc_busywait_load32(uint8_t* base, uint32_t addr) {
 #define PPC_LOOKUP_FUNC(x, y) *(PPCFunc**)(x + PPC_IMAGE_BASE + PPC_IMAGE_SIZE + (uint64_t(uint32_t(y) - PPC_CODE_BASE) * 2))
 
 #ifndef PPC_CALL_INDIRECT_FUNC
-#define PPC_CALL_INDIRECT_FUNC(x) (PPC_LOOKUP_FUNC(base, x))(ctx, base)
+// Guard against uninitialized function pointers (ctr=0 or out of range).
+// When vtable/vfunc lookup fails due to zero-initialized memory,
+// skip the call instead of crashing on out-of-bounds table access.
+#define PPC_CALL_INDIRECT_FUNC(x) \
+    (((x) >= PPC_CODE_BASE && (x) < (PPC_CODE_BASE + PPC_CODE_SIZE)) \
+        ? (PPC_LOOKUP_FUNC(base, x))(ctx, base) \
+        : (printf("[INDIRECT-CALL] Skipping invalid fn addr=0x%08X\n", (uint32_t)(x)), fflush(stdout), (void)0))
 #endif
 
 typedef void PPCFunc(struct PPCContext& __restrict__ ctx, uint8_t* base);
