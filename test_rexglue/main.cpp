@@ -50,12 +50,8 @@ int main() {
     rex::Runtime runtime(gameRoot, userRoot);
 
     // Explicitly use Vulkan backend
-    rex::RuntimeConfig cfg;
-    cfg.graphics = REX_GRAPHICS_BACKEND(rex::graphics::vulkan::VulkanGraphicsSystem);
-    printf("Using Vulkan graphics backend\n");
-
-    // Let rexglue create its own window via Vulkan presenter
-    auto status = runtime.Setup(PPCImageConfig, std::move(cfg));
+    // Default config — rexglue auto-creates graphics backend
+    auto status = runtime.Setup(PPCImageConfig, rex::RuntimeConfig{});
     if (status != 0) { g_log << "Setup failed: 0x" << std::hex << status << std::endl; return 1; }
 
     status = runtime.LoadXexImage("game:\\default.xex");
