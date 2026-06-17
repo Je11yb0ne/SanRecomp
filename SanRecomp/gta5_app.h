@@ -18,8 +18,20 @@ public:
             new GTA5App(ctx, "GTA5", PPCImageConfig));
     }
 
-    // Override hooks as needed for GTA V customization:
-    // void OnPreSetup(rex::RuntimeConfig& config) override {}
-    // void OnPostSetup() override {}
-    // void OnShutdown() override {}
+protected:
+    // Required virtual methods (pre-built lib doesn't export defaults)
+    bool SetupPresentation() override {
+        // Let rexglue handle graphics backend setup
+        return true;
+    }
+    void LaunchModule() override {
+        // rexglue launches the recompiled PPC entry point
+        // PPCFuncMappings[entry=0x83639888] is called automatically
+    }
+    bool OnInitialize() override { return true; }
+
+public:
+    void OnKeyDown(rex::ui::KeyEvent&) override {}
+    void OnKeyUp(rex::ui::KeyEvent&) override {}
+    void OnClosing(rex::ui::UIEvent&) override {}
 };
