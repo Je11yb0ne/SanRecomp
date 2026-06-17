@@ -9,7 +9,7 @@
 int main() {
     printf("=== GTA V rexglue Runtime ===\n");
 
-    std::filesystem::path gameRoot = "C:/Users/Jellybone/AppData/Roaming/SanRecomp/game";
+    std::filesystem::path gameRoot = "D:/Games/Xenia/gta5";
     std::filesystem::path userRoot = "C:/Users/Jellybone/AppData/Roaming/SanRecomp/save";
 
     rex::Runtime runtime(gameRoot, userRoot);
@@ -22,7 +22,7 @@ int main() {
     }
     printf("Runtime setup OK\n");
 
-    printf("Loading XEX...\n");
+    printf("Loading XEX from game_data_root=%s\n", gameRoot.string().c_str());
     status = runtime.LoadXexImage("default.xex");
     if (status != 0) {
         printf("LoadXexImage failed: 0x%08X\n", (unsigned)status);
