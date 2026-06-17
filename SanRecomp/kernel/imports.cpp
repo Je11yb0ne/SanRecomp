@@ -4917,12 +4917,40 @@ void VBlankTimerThread() {
             fflush(stdout);
         }
 
-        // Help break busy-wait loops in game init by simulating GPU progress
-        // The game polls address 0x838871A4 (offset 0x871A4 in graphics state)
-        // Write incrementing values to simulate hardware register changes
-        if (tick <= 30) {
-            uint32_t* pollAddr = (uint32_t*)(g_memory.base + 0x838871A4);
-            *pollAddr = __builtin_bswap32(tick); // Big-endian write
+        // Periodically scan for PM4 commands in guest memory
+        if (tick == 10 || tick == 20 || tick == 30) {
+            printf("[VBlank-Thread] Scanning for PM4 commands at tick %d...\n", tick);
+            // Scan multiple common Xbox 360 GPU buffer addresses
+            static const uint32_t scanAddrs[] = {
+                0x83000000, 0x83E00000, 0x40000000, 0x20000000,
+                0x83800000, 0x83700000, 0x84000000
+            };
+            for (uint32_t addr : scanAddrs) {
+                uint32_t* buf = (uint32_t*)(g_memory.base + addr);
+                uint32_t nonZero = 0;
+                for (uint32_t i = 0; i < 256; i++) { // First 1KB
+                    if (buf[i] != 0) nonZero++;
+                }
+                if (nonZero > 0) {
+                    printf("[VBlank-Thread] 0x%08X: %d non-zero dwords in first 1KB!\n", addr, nonZero);
+                    // Dump first 8 non-zero as PM4 packets
+                    int d = 0;
+                    for (uint32_t i = 0; i < 256 && d < 8; i++) {
+                        uint32_t val = __builtin_bswap32(buf[i]);
+                        if (val != 0) {
+                            printf("  [%04X] %08X", i*4, val);
+                            uint32_t type = (val >> 30) & 3;
+                            if (type == 3) {
+                                uint32_t opcode = (val >> 8) & 0x7F;
+                                printf(" (Type3 op=%02X cnt=%d)", opcode, ((val >> 16) & 0x3FFF) + 1);
+                            }
+                            printf("\n");
+                            d++;
+                        }
+                    }
+                }
+            }
+            fflush(stdout);
         }
 
         FireVBlankCallback();
