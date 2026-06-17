@@ -36,11 +36,15 @@ SanRecomp is a static recompilation project porting GTA V (Xbox 360) to PC. Fork
   - 自动生成函数导出、异常处理、模板脚手架
 - XenonRecomp 保留作为辅助工具
 
-**Current Phase: 9 — GPU 命令翻译 → 真实游戏画面**
-- Phase 8 目标完成（5/5）：Vulkan + 渲染循环 + VdSwap ✅
-- 画面仍是蓝色：GPU 命令缓冲未被翻译为 Vulkan 绘制
-- 下一步：实现 PM4 命令 → Vulkan 绘制调用翻译
-- 参考：UnleashedRecomp video.cpp (7500+ 行), rexglue graphics/vulkan/
+**Current Phase: rexglue 集成 — XEX 加载成功，游戏开始执行**
+- ✅ rexglue 预编译 SDK v0.8.1.32 成功集成
+- ✅ 197 PPC 文件编译 + 链接（200MB exe）
+- ✅ Runtime::Setup() 成功
+- ✅ LoadXexImage 通过 VFS `game:\default.xex` 路径成功
+- ⚠️ 游戏加载后 segfault——需调试崩溃原因
+- 🔧 exe 位置：`test_rexglue/out/v6/gta5_rexglue.exe`
+- 🔧 game_data_root：`D:/Games/Xenia/gta5`（含 RPF 资产）
+- 分支：`feature/rexglue-source-build`
 
 **⚠️ 工作纪律（每次必读）：**
 - **绝不主动停下来** — 除非遇到需要用户决策的硬阻塞
