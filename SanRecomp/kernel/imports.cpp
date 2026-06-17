@@ -4908,6 +4908,7 @@ void FireVBlankCallback() {
 }
 void VBlankTimerThread() {
     uint32_t tick = 0;
+    uint32_t* gfxState = (uint32_t*)(g_memory.base + 0x83800000);
     while (g_vblankTimerRunning.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60Hz
         tick++;
@@ -4915,6 +4916,15 @@ void VBlankTimerThread() {
             printf("[VBlank-Thread] tick=%u running=%d\n", tick, g_vblankTimerRunning.load());
             fflush(stdout);
         }
+
+        // Help break busy-wait loops in game init by simulating GPU progress
+        // The game polls address 0x838871A4 (offset 0x871A4 in graphics state)
+        // Write incrementing values to simulate hardware register changes
+        if (tick <= 30) {
+            uint32_t* pollAddr = (uint32_t*)(g_memory.base + 0x838871A4);
+            *pollAddr = __builtin_bswap32(tick); // Big-endian write
+        }
+
         FireVBlankCallback();
     }
     printf("[VBlank-Thread] EXITING (running=%d)\n", g_vblankTimerRunning.load());
@@ -4991,9 +5001,13 @@ void StartVBlankTimer() {
         printf("[VBlank] Timer started (60Hz)\n");
     }
 	if(g_gpuRingBuffer.interruptCallback==0){
-		g_gpuRingBuffer.interruptCallback=0x822D41E8;
-		g_gpuRingBuffer.interruptUserData=0x83830000; // Valid PPC address as graphics state
-		printf("[StartVBlankTimer] Fallback callback=0x822D41E8 userData=0x83830000\n");
+	    // Set the D3D device created flag in graphics state
+    // The game checks *(TLS + 312) bit 1 to decide if rendering is ready
+    // TLS base (r13) is at PCR offset, typically 0x82001000
+    // Write flag at TLS+312: set bit 1 (value 2)
+    uint32_t* tlsFlag = (uint32_t*)(g_memory.base + 0x82001000 + 312);
+    *tlsFlag = __builtin_bswap32(2);  // Set bit 1 = "rendering ready"
+    printf("[StartVBlankTimer] Set TLS+312 render flag = 0x%08X\n", __builtin_bswap32(*tlsFlag));
 		fflush(stdout);
 	}
 }
