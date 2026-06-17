@@ -3621,7 +3621,16 @@ void Video::PrepareFrameAndPresent()
     g_backBuffer->texture = swapChainTex;
     g_backBuffer->layout = RenderTextureLayout::PRESENT;
 
-    // Minimal command list: clear swap chain backbuffer
+    // Read guest framebuffer from D1GRPH_PRIMARY_SURFACE_ADDRESS
+    uint8_t* gpuRegs = g_memory.base + 0x7FC80000;
+    uint32_t guestFB = __builtin_bswap32(*(volatile uint32_t*)(gpuRegs + 0x1844 * 4));
+    bool hasGuestFB = (guestFB >= 0x80000000 && guestFB <= 0xE1000000) && guestFB != 0;
+
+    if (frameCount == 1 || frameCount % 60 == 0) {
+        printf("[PrepFrame] Guest FB at 0x%08X, hasFB=%d\n", guestFB, hasGuestFB);
+        fflush(stdout);
+    }
+
     auto& cmdList = g_commandLists[g_frame];
     cmdList->begin();
     cmdList->resetQueryPool(g_queryPools[g_frame].get(), 0, NUM_QUERIES);
@@ -3634,6 +3643,27 @@ void Video::PrepareFrameAndPresent()
     fbDesc.colorAttachmentsCount = 1;
     auto framebuffer = g_device->createFramebuffer(fbDesc);
     cmdList->setFramebuffer(framebuffer.get());
+
+    if (hasGuestFB && frameCount <= 5) {
+        // Sample a few pixels from the guest framebuffer
+        uint8_t* guestPixels = g_memory.base + guestFB;
+        printf("[PrepFrame] Guest FB sample: [0]=%02X%02X%02X%02X [100]=%02X%02X%02X%02X [10000]=%02X%02X%02X%02X\n",
+               guestPixels[0], guestPixels[1], guestPixels[2], guestPixels[3],
+               guestPixels[400], guestPixels[401], guestPixels[402], guestPixels[403],
+               guestPixels[40000], guestPixels[40001], guestPixels[40002], guestPixels[40003]);
+        // Count non-gray pixels
+        int nonGray = 0;
+        for (int i = 0; i < 1280 * 720 && i < 50000; i++) {
+            if (guestPixels[i*4] != 0x80 || guestPixels[i*4+1] != 0x80 ||
+                guestPixels[i*4+2] != 0x80 || guestPixels[i*4+3] != 0x80) nonGray++;
+        }
+        if (nonGray > 0)
+            printf("[PrepFrame] *** GAME RENDERED %d non-gray pixels! ***\n", nonGray);
+        else
+            printf("[PrepFrame] All pixels still gray — game hasn't rendered yet\n");
+        fflush(stdout);
+    }
+
     cmdList->clearColor(0, RenderColor(0.1f, 0.0f, 0.2f, 1.0f));
 
     cmdList->barriers(RenderBarrierStage::GRAPHICS,

@@ -4917,6 +4917,33 @@ void VBlankTimerThread() {
             fflush(stdout);
         }
 
+        // At tick 3: read display surface address from GPU registers
+        if (tick == 3) {
+            uint8_t* gpuRegs = g_memory.base + 0x7FC80000;
+            uint32_t d1grphAddr = __builtin_bswap32(*(volatile uint32_t*)(gpuRegs + 0x1844 * 4));
+            uint32_t d1grphCtrl = __builtin_bswap32(*(volatile uint32_t*)(gpuRegs + 0x1841 * 4));
+            uint32_t d1grphFlip = __builtin_bswap32(*(volatile uint32_t*)(gpuRegs + 0x1852 * 4));
+            uint32_t d1modeLock = __builtin_bswap32(*(volatile uint32_t*)(gpuRegs + 0x1838 * 4));
+            printf("[GPU-STATE] D1GRPH_PRIMARY_SURFACE_ADDRESS = 0x%08X\n", d1grphAddr);
+            printf("[GPU-STATE] D1GRPH_CONTROL = 0x%08X\n", d1grphCtrl);
+            printf("[GPU-STATE] D1GRPH_FLIP_CONTROL = 0x%08X\n", d1grphFlip);
+            printf("[GPU-STATE] D1MODE_MASTER_UPDATE_LOCK = 0x%08X\n", d1modeLock);
+            fflush(stdout);
+
+            // If it's a guest address, scan the first 64 bytes of the surface
+            if (d1grphAddr >= 0x80000000 && d1grphAddr < 0xA0000000) {
+                uint32_t* surf = (uint32_t*)(g_memory.base + d1grphAddr);
+                printf("[GPU-STATE] Surface first 8 pixels (RGBA?):\n");
+                for (int i = 0; i < 8 && i * 4 < 256; i++) {
+                    uint32_t pixel = __builtin_bswap32(surf[i]);
+                    printf("  [%d] 0x%08X (R=%d G=%d B=%d A=%d)\n", i, pixel,
+                           (pixel >> 24) & 0xFF, (pixel >> 16) & 0xFF,
+                           (pixel >> 8) & 0xFF, pixel & 0xFF);
+                }
+                fflush(stdout);
+            }
+        }
+
         // Call GPU capture dump at tick 25
         if (tick == 25) {
             extern void DumpGpuCapture();
@@ -5003,6 +5030,19 @@ static void InitVBlankPCR() {
     PPC_STORE_U32(ptrAddr, gfxBase);
     uint32_t cbPtrAddr = 0x822E1768;
     PPC_STORE_U32(cbPtrAddr, 0x822D41E8);  // Fallback render callback
+    // Initialize display controller + EDRAM (game's D3D init never completed)
+    uint8_t* gpuRegs = g_memory.base + 0x7FC80000;
+    // Xbox 360 EDRAM is at physical addr 0xE0000000, 10MB
+    uint32_t edramAddr = 0xE0000000;
+    VirtualAlloc(g_memory.base + edramAddr, 10 * 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
+    memset(g_memory.base + edramAddr, 0x80, 1280 * 720 * 4);  // Gray fill top-left
+    // Point display to EDRAM (where the game would render)
+    *(volatile uint32_t*)(gpuRegs + 0x1844 * 4) = __builtin_bswap32(edramAddr);
+    *(volatile uint32_t*)(gpuRegs + 0x1841 * 4) = __builtin_bswap32(0x00000001);
+    *(volatile uint32_t*)(gpuRegs + 0x1838 * 4) = __builtin_bswap32(0);
+    printf("[VBlank] Display: fb=0x%08X (EDRAM, 1280x720 gray)\n", edramAddr);
+    fflush(stdout);
+
     // Verify the write
     uint32_t verifyVal = __builtin_bswap32(*(uint32_t*)(g_memory.base + cbPtrAddr));
     printf("[VBlank] Fixed pointers: 0x%08X→0x%08X, 0x%08X→0x822D41E8 (verify: 0x%08X)\n",

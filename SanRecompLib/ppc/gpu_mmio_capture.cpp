@@ -29,13 +29,22 @@ void DumpGpuCapture() {
         printf("[GPU-CAP] No GPU MMIO writes captured\n");
         return;
     }
-    uint32_t dumpCount = count > 50 ? 50u : count;
-    printf("[GPU-CAP] %u GPU MMIO writes captured (dumping first %u):\n", count, dumpCount);
+    // Dump all captured writes (up to 200)
+    uint32_t dumpCount = count > 200 ? 200u : count;
+    printf("[GPU-CAP] %u total GPU MMIO writes (showing first %u):\n", count, dumpCount);
     for (uint32_t i = 0; i < dumpCount; i++) {
-        uint32_t idx = (count - dumpCount + i) % kCaptureSize;
-        printf("  [%u] reg=0x%04X val=0x%08X\n", i, s_captureBuffer[idx].reg, s_captureBuffer[idx].val);
+        uint32_t idx = i % kCaptureSize;
+        uint32_t r = s_captureBuffer[idx].reg;
+        uint32_t v = s_captureBuffer[idx].val;
+        const char* tag = "";
+        if (r == 0x1844) tag = " *** D1GRPH_PRIMARY_SURFACE_ADDRESS ***";
+        else if (r == 0x1841) tag = " - D1GRPH_CONTROL";
+        else if (r == 0x1852) tag = " - D1GRPH_FLIP_CONTROL";
+        else if (r == 0x1838) tag = " - D1MODE_MASTER_UPDATE_LOCK";
+        else if (r == 0x0C00) tag = " - CP_RB_BASE";
+        else if (r == 0x0C01) tag = " - CP_RB_CNTL";
+        printf("  [%3u] reg=0x%04X val=0x%08X%s\n", i, r, v, tag);
     }
     fflush(stdout);
-    s_captureWritePtr.store(0);  // Reset after dump
-    s_dumpEnabled.store(false);  // Only dump once
+    // Keep buffer for subsequent dumps
 }
