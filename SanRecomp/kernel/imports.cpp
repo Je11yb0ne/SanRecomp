@@ -5088,6 +5088,52 @@ static void InitVBlankPCR() {
     fflush(stdout);
 }
 
+// Early GPU initialization — must happen BEFORE _xstart runs.
+// On real Xbox 360, the kernel pre-initializes GPU registers.
+// GTA V expects these to be valid at startup.
+void EarlyGpuInit() {
+    uint8_t* base = g_memory.base;
+
+    // 1. Ring buffer at 0x83000000 (same as VdGetSystemCommandBuffer returns)
+    g_gpuRingBuffer.ringBufferBase = 0x83000000;
+    g_gpuRingBuffer.ringBufferSize = 0x100000;
+    g_gpuRingBuffer.initialized = true;
+    memset(base + g_gpuRingBuffer.ringBufferBase, 0, g_gpuRingBuffer.ringBufferSize);
+
+    // 2. Set CP_RB_BASE (register 0x0C00) to point to the ring buffer
+    uint8_t* gpuRegs = base + 0x7FC80000;
+    *(volatile uint32_t*)(gpuRegs + 0x0C00 * 4) = __builtin_bswap32(0x83000000);
+    // CP_RB_CNTL: enable ring buffer, 1MB size
+    *(volatile uint32_t*)(gpuRegs + 0x0C01 * 4) = __builtin_bswap32(0x0000000C);
+
+    // 3. EDRAM + display init (same as InitVBlankPCR)
+    uint32_t edramAddr = 0xE0000000;
+    VirtualAlloc(base + edramAddr, 10 * 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
+    memset(base + edramAddr, 0x80, 1280 * 720 * 4);
+    *(volatile uint32_t*)(gpuRegs + 0x1844 * 4) = __builtin_bswap32(edramAddr);
+    *(volatile uint32_t*)(gpuRegs + 0x1841 * 4) = __builtin_bswap32(0x00000001);
+    *(volatile uint32_t*)(gpuRegs + 0x1838 * 4) = __builtin_bswap32(0);
+
+    // 4. Graphics state + D3D flag (same as InitVBlankPCR)
+    uint32_t gfxBase = 0x83800000;
+    VirtualAlloc(base + gfxBase, 0x800000, MEM_COMMIT, PAGE_READWRITE);
+    memset(base + gfxBase, 0, 0x800000);
+    PPC_STORE_U32(gfxBase + 13992, 0x08000000);
+    PPC_STORE_U32(0x83C7BE5C, gfxBase);
+    PPC_STORE_U32(0x822E1768, 0x822D41E8);
+
+    // 5. Pre-create guest D3D device
+    uint32_t devAddr = gfxBase + 0x30000;
+    memset(base + devAddr, 0, 0x5000);
+    PPC_STORE_U32(devAddr + 0x3058 + 8,  0x44A00000);
+    PPC_STORE_U32(devAddr + 0x3058 + 12, 0x44340000);
+    PPC_STORE_U32(devAddr + 0x3058 + 20, 0x3F800000);
+
+    printf("[EarlyGpu] Ring buffer=0x83000000 EDRAM=0x%08X D3D dev=0x%08X\n",
+           edramAddr, devAddr);
+    fflush(stdout);
+}
+
 void StartVBlankTimer() {
     if (!g_vblankTimerRunning.load()) {
         InitVBlankPCR();

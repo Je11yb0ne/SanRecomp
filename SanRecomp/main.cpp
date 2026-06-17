@@ -486,6 +486,14 @@ int main(int argc, char *argv[])
         }
         printf("[Main] Video device created\n"); fflush(stdout);
     }
+    // Early GPU initialization — the game's _xstart expects GPU registers to be
+    // pre-configured (on real Xbox 360, the kernel sets these up before launching
+    // the game). Without this, the game's D3D init hangs waiting for GPU.
+    {
+        extern void EarlyGpuInit();
+        EarlyGpuInit();
+    }
+
     LOGN_WARNING("Start Guest Thread");
     LOGN_WARNING(modulePath.string());
     // Video::StartPipelinePrecompilation();

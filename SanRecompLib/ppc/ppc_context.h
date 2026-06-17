@@ -68,19 +68,29 @@ static inline uint32_t _ppc_busywait_load32(uint8_t* base, uint32_t addr) {
             fflush(stdout);
             s_break_next = true;  // break any busy-wait loop
         }
-        if (s_counter >= 200 && s_break_next) {
-            printf("[BUSY-WAIT] Breaking loop at addr=0x%08X after %u reads\n", addr, s_counter);
-            fflush(stdout);
-            // Write a non-zero value to break flag-polling or linked-list loops.
-            // For addr=0, redirect to sentinel at 0x10 (bswap32(0)=0 is a no-op).
-            // For other addrs, write 1 (like a flag becoming ready).
-            // Rotate break values: 0x00, 0xFF, 0x10, 0x01, 0x20, 0x02...
+        // For address 0x838871A4 (GPU register), wait MUCH longer between breaks.
+        // The game polls this waiting for a GPU event; we need to simulate async GPU timing.
+        // Short breaks (~200 reads) cause rapid value cycling that never satisfies the game.
+        uint32_t breakThreshold = (addr == 0x838871A4) ? 500000u : 200u;
+        if (s_counter >= breakThreshold && s_break_next) {
+            if (s_counter >= 200) {
+                printf("[BUSY-WAIT] Breaking loop at addr=0x%08X after %u reads\n", addr, s_counter);
+                fflush(stdout);
+            }
             static uint32_t s_break_seq = 0;
-            const uint32_t break_vals[] = {0, 0xFF, 0x10, 0x01, 0x20, 0x02, 0x40, 0x04, 0x80, 0x08, 0xDEADBEEF, 0xFFFFFFFF};
-            uint32_t break_val = break_vals[s_break_seq % 12];
-            s_break_seq++;
-            uint32_t write_val = addr ? break_val : 0x10;
-            *(volatile uint32_t*)(base + addr) = __builtin_bswap32(write_val);
+            // Simulate GPU progress with more realistic values for 0x838871A4
+            if (addr == 0x838871A4) {
+                // GPU register: write incrementing "progress" values
+                // 0 = idle, 1 = busy, 2 = done, >2 = completed stages
+                static uint32_t gpuProgress = 0;
+                gpuProgress++;
+                *(volatile uint32_t*)(base + addr) = __builtin_bswap32(gpuProgress);
+            } else {
+                const uint32_t break_vals[] = {0, 0xFF, 0x10, 0x01, 0x20, 0x02, 0x40, 0x04, 0x80, 0x08, 0xDEADBEEF, 0xFFFFFFFF};
+                uint32_t break_val = break_vals[s_break_seq % 12];
+                s_break_seq++;
+                *(volatile uint32_t*)(base + addr) = __builtin_bswap32(addr ? break_val : 0x10);
+            }
             s_counter = 0;
             s_last_addr = 0;
             s_break_next = false;
