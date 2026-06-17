@@ -4466,8 +4466,39 @@ void VdSwap()
         printf("[VdSwap] Frame #%d — game swap called\n", frame);
         fflush(stdout);
     }
-    // Don't call _VideoPresent() here — it crashes when called from VBlank thread.
-    // Frame presentation is handled by Video::PrepareFrameAndPresent() instead.
+
+    // Scan the ring buffer for PM4 commands on first few frames
+    if (frame <= 3 && g_gpuRingBuffer.initialized)
+    {
+        printf("[VdSwap] Ring buffer at guest 0x%08X, size %d bytes\n",
+               g_gpuRingBuffer.ringBufferBase, g_gpuRingBuffer.ringBufferSize);
+        fflush(stdout);
+        uint8_t* ringBuf = g_memory.base + g_gpuRingBuffer.ringBufferBase;
+        uint32_t bufSize = g_gpuRingBuffer.ringBufferSize;
+        uint32_t nonZeroCount = 0;
+        for (uint32_t i = 0; i < bufSize; i += 4)
+        {
+            uint32_t val = __builtin_bswap32(*(volatile uint32_t*)(ringBuf + i));
+            if (val != 0) nonZeroCount++;
+        }
+        if (nonZeroCount > 0)
+        {
+            printf("[VdSwap] Ring buffer has %d non-zero dwords!\n", nonZeroCount);
+            // Dump first 16 non-zero words
+            int dumped = 0;
+            for (uint32_t i = 0; i < bufSize && dumped < 16; i += 4)
+            {
+                uint32_t val = __builtin_bswap32(*(volatile uint32_t*)(ringBuf + i));
+                if (val != 0) {
+                    printf("  [%04X] %08X\n", i, val);
+                    dumped++;
+                }
+            }
+        }
+        else
+            printf("[VdSwap] Ring buffer EMPTY — no PM4 commands written by original VdSwap\n");
+        fflush(stdout);
+    }
 }
 
 void VdGetSystemCommandBuffer()
@@ -4552,8 +4583,9 @@ void VdInitializeRingBuffer(uint32_t physAddr, uint32_t sizeLog2)
     g_gpuRingBuffer.ringBufferSize = 1u << sizeLog2;
     g_gpuRingBuffer.initialized = true;
     
-    LOGF_UTILITY("ringBufferBase=0x{:08X} sizeLog2={} size={}", 
-                 physAddr, sizeLog2, g_gpuRingBuffer.ringBufferSize);
+    printf("[VdInitializeRingBuffer] physAddr=0x%08X sizeLog2=%d size=%d\n",
+           physAddr, sizeLog2, g_gpuRingBuffer.ringBufferSize);
+    fflush(stdout);
 }
 
 // Scan a command buffer for PM4 packets (helper function)

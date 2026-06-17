@@ -9222,6 +9222,133 @@ GUEST_FUNCTION_HOOK(sub_829D69D8, UnlockVertexBuffer);
 // VdSwap in kernel/imports.cpp, which is the correct point to drive the host present.
 
 // =============================================================================
+// GTA V D3D Diagnostic Hooks — log function calls to determine parameter layout
+// These hooks log register values when D3D functions are called, so we can
+// reverse-engineer the GTA V D3D wrapper calling conventions.
+// =============================================================================
+
+// Diagnostic tracer: logs function address + all registers
+static void D3DTrace_CreateTexture(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 5 || n % 60 == 0)
+        printf("[D3D-TRACE] CreateTexture #%d r3=%08X r4=%08X r5=%08X r6=%08X r7=%08X r8=%08X r9=%08X r10=%08X\n",
+               n, ctx.r3.u32, ctx.r4.u32, ctx.r5.u32, ctx.r6.u32, ctx.r7.u32, ctx.r8.u32, ctx.r9.u32, ctx.r10.u32);
+    // Return a non-null guest pointer to satisfy callers
+    // Use a safe PPC address (in the 0x83800000 range)
+    ctx.r3.u32 = 0x83880000 + (n * 256);
+}
+
+static void D3DTrace_CreateVertexBuffer(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 5 || n % 60 == 0)
+        printf("[D3D-TRACE] CreateVertexBuffer #%d r3=%08X r4=%08X r5=%08X r6=%08X r7=%08X r8=%08X\n",
+               n, ctx.r3.u32, ctx.r4.u32, ctx.r5.u32, ctx.r6.u32, ctx.r7.u32, ctx.r8.u32);
+    ctx.r3.u32 = 0x83884000 + (n * 256);
+}
+
+static void D3DTrace_DrawIndexedPrimitive(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 10 || n % 60 == 0)
+        printf("[D3D-TRACE] DrawIndexedPrimitive #%d r3=%08X r4=%08X r5=%08X r6=%08X r7=%08X r8=%08X r9=%08X r10=%08X\n",
+               n, ctx.r3.u32, ctx.r4.u32, ctx.r5.u32, ctx.r6.u32, ctx.r7.u32, ctx.r8.u32, ctx.r9.u32, ctx.r10.u32);
+}
+
+static void D3DTrace_SetRenderTarget(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 5 || n % 60 == 0)
+        printf("[D3D-TRACE] SetRenderTarget #%d r3=%08X r4=%08X r5=%08X r6=%08X r7=%08X\n",
+               n, ctx.r3.u32, ctx.r4.u32, ctx.r5.u32, ctx.r6.u32, ctx.r7.u32);
+}
+
+static void D3DTrace_Clear(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 10 || n % 60 == 0)
+        printf("[D3D-TRACE] Clear #%d r3=%08X r4=%08X r5=%08X r6=%08X r7=%08X r8=%08X r9=%08X\n",
+               n, ctx.r3.u32, ctx.r4.u32, ctx.r5.u32, ctx.r6.u32, ctx.r7.u32, ctx.r8.u32, ctx.r9.u32);
+}
+
+static void D3DTrace_SetTexture(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 5 || n % 120 == 0)
+        printf("[D3D-TRACE] SetTexture #%d r3=%08X r4=%08X r5=%08X r6=%08X\n",
+               n, ctx.r3.u32, ctx.r4.u32, ctx.r5.u32, ctx.r6.u32);
+}
+
+static void D3DTrace_SetStreamSource(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 5 || n % 120 == 0)
+        printf("[D3D-TRACE] SetStreamSource #%d r3=%08X r4=%08X r5=%08X r6=%08X r7=%08X\n",
+               n, ctx.r3.u32, ctx.r4.u32, ctx.r5.u32, ctx.r6.u32, ctx.r7.u32);
+}
+
+static void D3DTrace_SetIndices(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 5 || n % 120 == 0)
+        printf("[D3D-TRACE] SetIndices #%d r3=%08X r4=%08X r5=%08X\n",
+               n, ctx.r3.u32, ctx.r4.u32, ctx.r5.u32);
+}
+
+static void D3DTrace_SetVertexShader(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 5 || n % 120 == 0)
+        printf("[D3D-TRACE] SetVertexShader #%d r3=%08X r4=%08X\n", n, ctx.r3.u32, ctx.r4.u32);
+}
+
+static void D3DTrace_SetPixelShader(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 5 || n % 120 == 0)
+        printf("[D3D-TRACE] SetPixelShader #%d r3=%08X r4=%08X\n", n, ctx.r3.u32, ctx.r4.u32);
+}
+
+static void D3DTrace_DrawPrimitive(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 10 || n % 60 == 0)
+        printf("[D3D-TRACE] DrawPrimitive #%d r3=%08X r4=%08X r5=%08X r6=%08X r7=%08X\n",
+               n, ctx.r3.u32, ctx.r4.u32, ctx.r5.u32, ctx.r6.u32, ctx.r7.u32);
+}
+
+static void D3DTrace_SetRenderState(PPCContext& ctx, uint8_t* base)
+{
+    static int n = 0;
+    if (++n <= 10 || n % 120 == 0)
+        printf("[D3D-TRACE] SetRenderState #%d r3=%08X r4=%08X\n", n, ctx.r3.u32, ctx.r4.u32);
+}
+
+// Diagnostic hooks — trace only, no real GPU work
+// These intercept the game's D3D calls to record register values
+// After running, analyze the logs to determine parameter layouts
+PPC_FUNC(sub_829D3400) { D3DTrace_CreateTexture(ctx, base); }       // CreateTexture
+PPC_FUNC(sub_829D3520) { D3DTrace_CreateVertexBuffer(ctx, base); }  // CreateVertexBuffer
+// sub_829D4EE0 is inside #if 0 — skip for now (GUEST_FUNCTION_HOOK conflict)
+// sub_829D8860 already has active PPC_FUNC at line 9045 — DO NOT REDEFINE
+PPC_FUNC(sub_829D3728) { D3DTrace_SetTexture(ctx, base); }          // SetTexture
+PPC_FUNC(sub_829CD350) { D3DTrace_SetVertexShader(ctx, base); }     // SetVertexShader
+PPC_FUNC(sub_829C9070) { D3DTrace_SetStreamSource(ctx, base); }     // SetStreamSource
+PPC_FUNC(sub_829C96D0) { D3DTrace_SetIndices(ctx, base); }          // SetIndices
+
+// Also trace the render target and clear functions
+PPC_FUNC(sub_82543EE0) { D3DTrace_SetRenderTarget(ctx, base); }     // SetRenderTarget (GTA V?)
+PPC_FUNC(sub_825444F0) { D3DTrace_SetRenderTarget(ctx, base); }     // SetRenderTarget alt
+PPC_FUNC(sub_82555B30) { D3DTrace_Clear(ctx, base); }               // Clear
+
+// Trace common SetRenderState calls (r4 = state value)
+PPC_FUNC(sub_82541A78) { D3DTrace_SetRenderState(ctx, base); }      // D3DRS_ZENABLE
+PPC_FUNC(sub_82541AC0) { D3DTrace_SetRenderState(ctx, base); }      // D3DRS_ZWRITEENABLE
+PPC_FUNC(sub_82541460) { D3DTrace_SetRenderState(ctx, base); }      // D3DRS_ALPHATESTENABLE
+PPC_FUNC(sub_82541400) { D3DTrace_SetRenderState(ctx, base); }      // D3DRS_CULLMODE
+
+// =============================================================================
 // Sonic 06 D3D hooks - DISABLED for GTA V
 // These addresses are from Sonic 06 and don't exist in GTA V's address space.
 // Keeping them here for reference but they should not be active.
