@@ -12,6 +12,7 @@
 // The kernel has MMIO interception, PM4 command processing, and Vulkan/D3D12 backends
 // Hooking VdSwap/VdGetSystemCommandBuffer prevents rexglue from working properly
 #include <rex/runtime.h>
+#include <rex/graphics/vulkan/graphics_system.h>
 #include <rex/ui/windowed_app_context_win.h>
 #include <rex/system/xthread.h>
 #include <cstdio>
@@ -55,7 +56,19 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nShow) {
     appCtx.Initialize();
     runtime.set_app_context(&appCtx);
 
-    auto status = runtime.Setup(PPCImageConfig, rex::RuntimeConfig{});
+    // Inject Vulkan backend — default would try D3D12 which isn't compiled in
+    rex::RuntimeConfig cfg;
+    cfg.graphics = REX_GRAPHICS_BACKEND(rex::graphics::vulkan::VulkanGraphicsSystem);
+    auto status = runtime.Setup(PPCImageConfig, std::move(cfg));
+    // Check if graphics system is active after setup
+    if (runtime.graphics_system()) {
+        g_log << "Graphics system: PRESENT" << std::endl;
+    } else {
+        g_log << "Graphics system: NULL (no GPU backend)" << std::endl;
+    }
+    if (runtime.is_tool_mode()) {
+        g_log << "WARNING: running in tool_mode (no GPU rendering!)" << std::endl;
+    }
     if (status != 0) { g_log << "Setup failed: 0x" << std::hex << status << std::endl; return 1; }
 
     status = runtime.LoadXexImage("game:\\default.xex");
