@@ -23,7 +23,8 @@ int main() {
     printf("Runtime setup OK\n");
 
     printf("Loading XEX from game_data_root=%s\n", gameRoot.string().c_str());
-    status = runtime.LoadXexImage("default.xex");
+    // VFS mounts game_data_root at d: and game: symbolic links
+    status = runtime.LoadXexImage("game:\\default.xex");
     if (status != 0) {
         printf("LoadXexImage failed: 0x%08X\n", (unsigned)status);
         return 1;
