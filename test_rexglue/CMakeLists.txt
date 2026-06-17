@@ -13,8 +13,9 @@ set(REXGLUE_SDK_ROOT "${CMAKE_SOURCE_DIR}/../tools/rexglue-sdk-0.8.1.32-dev.gf22
 # Compiler/linker set via cmake command line (-DCMAKE_CXX_COMPILER=..., etc.)
 # Do NOT set here — causes rc.exe detection issues
 
-# Include rexglue SDK headers
+# Include rexglue SDK headers + generated code dir
 include_directories("${REXGLUE_SDK_ROOT}/include")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Link directories for pre-built libs
 link_directories("${REXGLUE_SDK_ROOT}/lib")
@@ -24,10 +25,11 @@ file(GLOB REXGLUE_GENERATED_SOURCES
     "generated/default/*.cpp"
 )
 
-# Our minimal test entry point
+# Our minimal test entry point + GTA V app
 add_executable(gta5_rexglue_test
     main.cpp
     polyfills.cpp
+    ../SanRecomp/gta5_app.h
     ${REXGLUE_GENERATED_SOURCES}
 )
 
