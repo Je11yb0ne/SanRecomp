@@ -1604,6 +1604,85 @@ struct Event final : KernelObject, HostObject<XKEVENT>
 
 static std::atomic<uint32_t> g_keSetEventGeneration;
 
+// =============================================================================
+// Timer Kernel Object
+// Timer type 0 = NotificationTimer (manual-reset), 1 = SynchronizationTimer (auto-reset)
+// =============================================================================
+
+// XKTIMER guest struct (based on Xenia's X_KTIMER, 0x28 bytes)
+struct XKTIMER
+{
+    XDISPATCHER_HEADER Header;  // 0x00
+    be<uint64_t> DueTime;       // 0x10
+    uint8_t _pad[12];           // 0x18 (table_bucket_entry + dpc pointer)
+    be<uint32_t> Period;        // 0x24
+};
+
+struct Timer final : KernelObject, HostObject<XKTIMER>
+{
+    bool manualReset;
+    std::atomic<bool> signaled;
+    std::chrono::steady_clock::time_point dueTime;
+    uint32_t periodMs;
+
+    Timer(XKTIMER* timer)
+        : manualReset(!timer->Header.Type), signaled(false), periodMs(0)
+    { dueTime = std::chrono::steady_clock::time_point::max(); }
+
+    Timer(uint32_t timerType)
+        : manualReset(timerType == 0), signaled(false), periodMs(0)
+    { dueTime = std::chrono::steady_clock::time_point::max(); }
+
+    void SetTimer(int64_t dueTime100ns, uint32_t period, bool resume)
+    {
+        auto now = std::chrono::steady_clock::now();
+        int64_t ms = (dueTime100ns < 0) ? (-dueTime100ns / 10000) : dueTime100ns;
+        dueTime = now + std::chrono::milliseconds(ms);
+        periodMs = period;
+        signaled = false;
+        if (resume) { signaled = true; signaled.notify_all(); }
+    }
+
+    void Cancel()
+    {
+        signaled = false;
+        dueTime = std::chrono::steady_clock::time_point::max();
+        periodMs = 0;
+    }
+
+    uint32_t Wait(uint32_t timeout) override
+    {
+        auto now = std::chrono::steady_clock::now();
+
+        if (now >= dueTime)
+        {
+            signaled = true;
+            if (manualReset) signaled.notify_all(); else signaled.notify_one();
+            if (periodMs > 0) { dueTime = now + std::chrono::milliseconds(periodMs); signaled = false; }
+            return STATUS_SUCCESS;
+        }
+
+        auto waitUntil = dueTime;
+        if (timeout != INFINITE)
+        {
+            auto timeoutPoint = now + std::chrono::milliseconds(timeout);
+            if (timeoutPoint < waitUntil) waitUntil = timeoutPoint;
+        }
+
+        while (std::chrono::steady_clock::now() < waitUntil)
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+
+        if (std::chrono::steady_clock::now() >= dueTime)
+        {
+            signaled = true;
+            signaled.notify_all();
+            if (periodMs > 0) { dueTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(periodMs); signaled = false; }
+            return STATUS_SUCCESS;
+        }
+        return STATUS_TIMEOUT;
+    }
+};
+
 struct Semaphore final : KernelObject, HostObject<XKSEMAPHORE>
 {
     std::atomic<uint32_t> count;
@@ -5063,6 +5142,40 @@ bool KeSetEvent(XKEVENT* pEvent, uint32_t Increment, bool Wait)
     return result;
 }
 
+bool KeInitializeEvent(XKEVENT* pEvent, uint32_t Type, bool State)
+{
+    // Type 0 = NotificationEvent (manual-reset), Type 1 = SynchronizationEvent (auto-reset)
+    // XKEVENT is typedef of XDISPATCHER_HEADER — set fields directly
+    pEvent->Type = Type;
+    pEvent->SignalState = State ? 1 : 0;
+    pEvent->WaitListHead.Flink = 0;  // Will be set to OBJECT_SIGNATURE by QueryKernelObject
+    pEvent->WaitListHead.Blink = 0;
+    LOGF_IMPL(Utility, "KeInitializeEvent", "Type={}, State={}", Type, State);
+}
+
+bool KePulseEvent(XKEVENT* pEvent, uint32_t Increment, bool Wait)
+{
+    // Pulse: wake all waiters, then immediately reset to non-signaled
+    // Manual-reset: notify_all, auto-reset: notify_one
+    auto& event = *QueryKernelObject<Event>(*pEvent);
+    bool prev = event.signaled.load();
+
+    // Wake waiters by signaling
+    event.signaled = true;
+    if (event.manualReset)
+        event.signaled.notify_all();
+    else
+        event.signaled.notify_one();
+
+    // Reset immediately — waiters already unblocked
+    event.signaled = false;
+
+    ++g_keSetEventGeneration;
+    g_keSetEventGeneration.notify_all();
+
+    return prev;
+}
+
 bool KeResetEvent(XKEVENT* pEvent)
 {
     return QueryKernelObject<Event>(*pEvent)->Reset();
@@ -5095,6 +5208,11 @@ uint32_t KeWaitForSingleObject(XDISPATCHER_HEADER* Object, uint32_t WaitReason, 
 
         case 5:
             QueryKernelObject<Semaphore>(*Object)->Wait(timeout);
+            break;
+
+        case 8:
+        case 9:
+            QueryKernelObject<Timer>(*Object)->Wait(timeout);
             break;
 
         default:
@@ -5895,19 +6013,44 @@ uint32_t KeWaitForMultipleObjects(uint32_t Count, xpointer<XDISPATCHER_HEADER>* 
     
     // Convert timeout to uint32_t (clamp if needed)
     uint32_t timeoutMs32 = (timeoutMs > 0xFFFFFFFF) ? INFINITE : static_cast<uint32_t>(timeoutMs);
-    
-    // Collect object addresses from the dispatcher headers
-    // Convert host pointers back to guest addresses
-    std::vector<uint32_t> addresses(Count);
-    for (size_t i = 0; i < Count; i++)
+
+    // Implement proper WaitMultiple with polling
+
+    auto checkSignaled = [](XDISPATCHER_HEADER* obj) -> bool {
+        switch (obj->Type) {
+            case 0: case 1:
+                return QueryKernelObject<Event>(*obj)->signaled.load();
+            case 5:
+                return QueryKernelObject<Semaphore>(*obj)->count.load() > 0;
+            case 8: case 9:
+                return std::chrono::steady_clock::now() >= QueryKernelObject<Timer>(*obj)->dueTime;
+            default:
+                return false;
+        }
+    };
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs32);
+
+    while (true)
     {
-        // Objects[i].get() returns host pointer, convert to guest address
-        addresses[i] = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(Objects[i].get()) - reinterpret_cast<uintptr_t>(g_memory.base));
+        if (WaitType == 0) // WaitAll
+        {
+            bool allReady = true;
+            for (uint32_t i = 0; i < Count; i++)
+            { if (!checkSignaled(Objects[i].get())) { allReady = false; break; } }
+            if (allReady) return STATUS_SUCCESS;
+        }
+        else // WaitAny
+        {
+            for (uint32_t i = 0; i < Count; i++)
+            { if (checkSignaled(Objects[i].get())) return STATUS_WAIT_0 + i; }
+        }
+
+        if (timeoutMs32 != INFINITE && std::chrono::steady_clock::now() >= deadline)
+            return STATUS_TIMEOUT;
+
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
-    
-    // Delegate to SyncTable_WaitMultiple
-    // TODO: Implement proper WaitMultiple without SyncTable
-    return STATUS_SUCCESS;
 }
 
 uint32_t KeRaiseIrqlToDpcLevel()
@@ -6273,22 +6416,69 @@ void XamFree(void* buffer)
 }
 
 
-uint32_t NtSetTimerEx(void* timerHandle, void* dueTime, void* apcRoutine, void* apcContext, uint32_t resume, uint32_t period, void* previousState)
+uint32_t NtSetTimerEx(uint32_t timerHandle, be<int64_t>* dueTime, uint32_t apcRoutine, uint32_t apcContext, uint32_t resume, uint32_t period, be<uint32_t>* previousState)
 {
-    LOG_UTILITY("!!! STUB !!!");
+    auto* timer = GetKernelObject<Timer>(timerHandle);
+    if (!timer)
+    {
+        LOGF_IMPL(Utility, "NtSetTimerEx", "Invalid timer handle: 0x{:X}", timerHandle);
+        return STATUS_INVALID_HANDLE;
+    }
+    int64_t due = dueTime ? dueTime->get() : 0;
+    timer->SetTimer(due, period, resume != 0);
+    LOGF_IMPL(Utility, "NtSetTimerEx", "handle=0x{:X} due={} period={}ms resume={}", timerHandle, due, period, resume);
     return 0;
 }
 
-uint32_t NtCancelTimer(void* timerHandle, void* currentState)
+uint32_t NtCancelTimer(uint32_t timerHandle, be<uint32_t>* currentState)
 {
-    LOG_UTILITY("!!! STUB !!!");
+    auto* timer = GetKernelObject<Timer>(timerHandle);
+    if (!timer)
+    {
+        LOGF_IMPL(Utility, "NtCancelTimer", "Invalid timer handle: 0x{:X}", timerHandle);
+        return STATUS_INVALID_HANDLE;
+    }
+    timer->Cancel();
+    LOGF_IMPL(Utility, "NtCancelTimer", "handle=0x{:X}", timerHandle);
     return 0;
 }
 
-uint32_t NtCreateTimer(void* timerHandle, uint32_t desiredAccess, void* objectAttributes, uint32_t timerType)
+uint32_t NtCreateTimer(uint32_t* timerHandle, uint32_t desiredAccess, void* objectAttributes, uint32_t timerType)
 {
-    LOG_UTILITY("!!! STUB !!!");
+    // timerType: 0 = NotificationTimer, 1 = SynchronizationTimer
+    auto* timer = CreateKernelObject<Timer>(timerType);
+    *timerHandle = g_memory.MapVirtual(timer);
+    LOGF_IMPL(Utility, "NtCreateTimer", "handle=0x{:X} type={}", *timerHandle, timerType);
     return 0;
+}
+
+void KeInitializeTimerEx(XKTIMER* pTimer, uint32_t Type)
+{
+    // Type: 0 = NotificationTimer (manual-reset, XDISPATCHER_HEADER.Type=8)
+    //       1 = SynchronizationTimer (auto-reset, XDISPATCHER_HEADER.Type=9)
+    pTimer->Header.Type = 8 + Type;
+    pTimer->Header.SignalState = 0;
+    pTimer->Header.WaitListHead.Flink = 0;
+    pTimer->Header.WaitListHead.Blink = 0;
+    pTimer->DueTime = 0;
+    pTimer->Period = 0;
+    LOGF_IMPL(Utility, "KeInitializeTimerEx", "Type={}", Type);
+}
+
+bool KeSetTimerEx(XKTIMER* pTimer, be<int64_t> dueTime100ns, uint32_t periodMs, void* dpc)
+{
+    auto& timer = *QueryKernelObject<Timer>(pTimer->Header);
+    timer.SetTimer(dueTime100ns.get(), periodMs, false);
+    LOGF_IMPL(Utility, "KeSetTimerEx", "due={} period={}ms", dueTime100ns.get(), periodMs);
+    return TRUE;
+}
+
+bool KeCancelTimer(XKTIMER* pTimer)
+{
+    auto& timer = *QueryKernelObject<Timer>(pTimer->Header);
+    timer.Cancel();
+    LOGF_IMPL(Utility, "KeCancelTimer", "");
+    return TRUE;
 }
 
 uint32_t NtCreateMutant(void* mutantHandle, uint32_t desiredAccess, void* objectAttributes, uint32_t initialOwner)
