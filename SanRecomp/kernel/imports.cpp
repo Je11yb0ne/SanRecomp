@@ -4917,12 +4917,18 @@ void VBlankTimerThread() {
             fflush(stdout);
         }
 
+        // Call GPU capture dump at tick 25
+        if (tick == 25) {
+            extern void DumpGpuCapture();
+            DumpGpuCapture();
+        }
+
         // Periodically scan for PM4 commands in guest memory
         if (tick == 10 || tick == 20 || tick == 30) {
             printf("[VBlank-Thread] Scanning for PM4 commands at tick %d...\n", tick);
             // Scan multiple common Xbox 360 GPU buffer addresses
             static const uint32_t scanAddrs[] = {
-                0x83000000, 0x83E00000, 0x40000000, 0x20000000,
+                0x83000000, 0x83E00000, 0x7FC80000, 0x40000000,
                 0x83800000, 0x83700000, 0x84000000
             };
             for (uint32_t addr : scanAddrs) {

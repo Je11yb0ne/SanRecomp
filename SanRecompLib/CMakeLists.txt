@@ -25,6 +25,9 @@ foreach(i RANGE 0 545)
     list(APPEND SAN_RECOMP_PPC_RECOMPILED_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_recomp.${i}.cpp")
 endforeach()
 
+# GPU MMIO capture — intercepts GPU register writes from PPC code
+list(APPEND SAN_RECOMP_PPC_RECOMPILED_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/ppc/gpu_mmio_capture.cpp")
+
 # XenonRecomp custom command disabled - PPC files already generated
 # To regenerate, run manually:
 #   cd SanRecompLib/config && /path/to/XenonRecomp ./GTA5.toml ../../SanRecomp/cpu/ppc_context.h
