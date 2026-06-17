@@ -6,10 +6,10 @@
 #include <rex/rex_app.h>
 #include "generated/default/gta5_recomp_init.h"
 
-class GTA5App : public rex::ReXApp {
+class GTA5App final : public rex::ReXApp {
 public:
     using rex::ReXApp::ReXApp;
-    ~GTA5App() override {}
+    ~GTA5App() {}
 
     static std::unique_ptr<rex::ui::WindowedApp> Create(
         rex::ui::WindowedAppContext& ctx) {
@@ -19,6 +19,8 @@ public:
 
 protected:
     // Pre-built DLL doesn't export these — provide stubs
+    bool SetupEnvironment() override { return true; }
+    bool ConstructRuntime(const rex::PathConfig&) override { return true; }
     bool SetupPresentation() override { return true; }
     void LaunchModule() override {}
     bool OnInitialize() override { return true; }
