@@ -4855,26 +4855,7 @@ void FireVBlankCallback() {
             ctx.r3.u32 = g_gpuRingBuffer.interruptUserData;
             ctx.r4.u32 = 0;
 
-            // Draw a test pattern to the framebuffer BEFORE calling the game callback
-        // This verifies the display pipeline works
-        if (fireCount <= 10) {
-            uint8_t* fb = g_memory.base + 0xE0000000;
-            // Draw colored horizontal stripes
-            for (int y = 0; y < 720; y++) {
-                uint8_t r = (y < 240) ? 0xFF : 0x00;
-                uint8_t g = (y >= 240 && y < 480) ? 0xFF : 0x00;
-                uint8_t b = (y >= 480) ? 0xFF : 0x00;
-                for (int x = 0; x < 1280; x++) {
-                    int idx = (y * 1280 + x) * 4;
-                    fb[idx + 0] = b;  // B
-                    fb[idx + 1] = g;  // G
-                    fb[idx + 2] = r;  // R
-                    fb[idx + 3] = 0xFF; // A
-                }
-            }
-        }
-
-        // Call our SEH-protected wrapper (not the raw dispatch table pointer)
+            // Call our SEH-protected wrapper (not the raw dispatch table pointer)
         // This ensures the crash is caught by sub_822D41E8's __try/__except
         extern void sub_822D41E8(PPCContext&, uint8_t*);
         __try {
@@ -5066,6 +5047,20 @@ static void InitVBlankPCR() {
     PPC_STORE_U32(ptrAddr, gfxBase);
     uint32_t cbPtrAddr = 0x822E1768;
     PPC_STORE_U32(cbPtrAddr, 0x822D41E8);  // Fallback render callback
+
+    // Pre-create guest D3D device at 0x83830000 (UnleashedRecomp pattern)
+    {
+        uint32_t devAddr = gfxBase + 0x30000;
+        memset(g_memory.base + devAddr, 0, 0x5000);
+        uint8_t* d = g_memory.base + devAddr;
+        // viewport at offset 0x3058: { float x,y,width,height,minZ,maxZ }
+        PPC_STORE_U32(devAddr + 0x3058 + 8,  0x44A00000); // 1280.0f
+        PPC_STORE_U32(devAddr + 0x3058 + 12, 0x44340000); // 720.0f
+        PPC_STORE_U32(devAddr + 0x3058 + 20, 0x3F800000); // 1.0f (maxZ)
+        printf("[VBlank] Guest D3D device at 0x%08X (viewport 1280x720)\n", devAddr);
+        fflush(stdout);
+    }
+
     // Initialize display controller + EDRAM (game's D3D init never completed)
     uint8_t* gpuRegs = g_memory.base + 0x7FC80000;
     // Xbox 360 EDRAM is at physical addr 0xE0000000, 10MB
