@@ -9,29 +9,36 @@
 #ifdef _WIN32
 #include <windows.h>
 
-// Vectored exception handler to catch game crashes
+// Vectored exception handler — catches access violations and maps missing pages
+// GTA V accesses Xbox 360 physical addresses (0x00000000-0x7FFFFFFF) which aren't
+// in the normal guest memory range (0x80000000+). We dynamically commit these.
 static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* info) {
     DWORD code = info->ExceptionRecord->ExceptionCode;
-    void* addr = info->ExceptionRecord->ExceptionAddress;
-    printf("\n!!! GAME CRASH !!!\n");
-    printf("  Exception: 0x%08lX at %p\n", code, addr);
-    if (info->ExceptionRecord->NumberParameters >= 2) {
-        printf("  Info: type=%lld addr=0x%016llX\n",
-               info->ExceptionRecord->ExceptionInformation[0],
-               info->ExceptionRecord->ExceptionInformation[1]);
+
+    if (code == EXCEPTION_ACCESS_VIOLATION) {
+        uintptr_t faultAddr = info->ExceptionRecord->ExceptionInformation[1];
+        ULONG_PTR page = faultAddr & ~0xFFFULL;
+
+        // Try to commit the page (handles physical address accesses)
+        LPVOID result = VirtualAlloc((LPVOID)page, 0x1000, MEM_COMMIT, PAGE_READWRITE);
+        if (result) {
+            static int s_commitCount = 0;
+            if (++s_commitCount <= 20) {
+                printf("[MEM] Committed page at %p (fault=0x%llX)\n", (void*)page, faultAddr);
+                fflush(stdout);
+            }
+            return EXCEPTION_CONTINUE_EXECUTION; // Retry
+        }
+
+        // Couldn't commit — print crash info and let it die
+        printf("\n!!! GAME CRASH (unfixable) !!!\n");
+        printf("  Exception: 0x%08lX at %p\n", code, info->ExceptionRecord->ExceptionAddress);
+        printf("  Fault addr: 0x%016llX\n", faultAddr);
+        auto* ctx = info->ContextRecord;
+        printf("  RIP=0x%016llX RSP=0x%016llX\n", ctx->Rip, ctx->Rsp);
+        fflush(stdout);
     }
-    // Print register state
-    auto* ctx = info->ContextRecord;
-    printf("  RAX=0x%016llX RBX=0x%016llX RCX=0x%016llX\n",
-           ctx->Rax, ctx->Rbx, ctx->Rcx);
-    printf("  RDX=0x%016llX RSI=0x%016llX RDI=0x%016llX\n",
-           ctx->Rdx, ctx->Rsi, ctx->Rdi);
-    printf("  R8 =0x%016llX R9 =0x%016llX R10=0x%016llX\n",
-           ctx->R8, ctx->R9, ctx->R10);
-    printf("  RSP=0x%016llX RBP=0x%016llX RIP=0x%016llX\n",
-           ctx->Rsp, ctx->Rbp, ctx->Rip);
-    fflush(stdout);
-    return EXCEPTION_CONTINUE_SEARCH; // Let it crash with info printed
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 #endif
 
