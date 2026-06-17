@@ -12,7 +12,7 @@
 // The kernel has MMIO interception, PM4 command processing, and Vulkan/D3D12 backends
 // Hooking VdSwap/VdGetSystemCommandBuffer prevents rexglue from working properly
 #include <rex/runtime.h>
-#include <rex/ui/windowed_app_context_win.h>
+#include <rex/graphics/vulkan/graphics_system.h>
 #include <rex/system/xthread.h>
 #include <cstdio>
 #include <filesystem>
@@ -36,7 +36,7 @@ static LONG WINAPI PageFaultHandler(EXCEPTION_POINTERS* info) {
 }
 #endif
 
-int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nShow) {
+int main() {
     g_log.open("gta5_rexglue.log");
     g_log << "=== GTA V rexglue WIN32 ===" << std::endl;
 
@@ -49,8 +49,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nShow) {
     std::filesystem::path userRoot = "C:/Users/Jellybone/AppData/Roaming/SanRecomp/save";
     rex::Runtime runtime(gameRoot, userRoot);
 
+    // Explicitly use Vulkan backend
+    rex::RuntimeConfig cfg;
+    cfg.graphics = REX_GRAPHICS_BACKEND(rex::graphics::vulkan::VulkanGraphicsSystem);
+    printf("Using Vulkan graphics backend\n");
+
     // Let rexglue create its own window via Vulkan presenter
-    auto status = runtime.Setup(PPCImageConfig, rex::RuntimeConfig{});
+    auto status = runtime.Setup(PPCImageConfig, std::move(cfg));
     if (status != 0) { g_log << "Setup failed: 0x" << std::hex << status << std::endl; return 1; }
 
     status = runtime.LoadXexImage("game:\\default.xex");

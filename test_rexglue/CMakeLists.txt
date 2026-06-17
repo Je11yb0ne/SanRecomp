@@ -11,7 +11,7 @@ link_directories("${RX}/lib")
 
 file(GLOB REXGLUE_SRCS "generated/default/*.cpp")
 
-add_executable(gta5_rexglue WIN32
+add_executable(gta5_rexglue
     main.cpp polyfills.cpp ${REXGLUE_SRCS})
 target_compile_options(gta5_rexglue PRIVATE /W3 /bigobj /EHa)
 target_compile_definitions(gta5_rexglue PRIVATE SPDLOG_FMT_EXTERNAL)
