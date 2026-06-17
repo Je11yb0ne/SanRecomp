@@ -12,7 +12,7 @@
 // The kernel has MMIO interception, PM4 command processing, and Vulkan/D3D12 backends
 // Hooking VdSwap/VdGetSystemCommandBuffer prevents rexglue from working properly
 #include <rex/runtime.h>
-#include <rex/graphics/vulkan/graphics_system.h>
+#include <rex/ui/windowed_app_context_win.h>
 #include <rex/system/xthread.h>
 #include <cstdio>
 #include <filesystem>
@@ -36,7 +36,7 @@ static LONG WINAPI PageFaultHandler(EXCEPTION_POINTERS* info) {
 }
 #endif
 
-int main() {
+int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nShow) {
     g_log.open("gta5_rexglue.log");
     g_log << "=== GTA V rexglue WIN32 ===" << std::endl;
 
@@ -50,7 +50,11 @@ int main() {
     rex::Runtime runtime(gameRoot, userRoot);
 
     // Explicitly use Vulkan backend
-    // Default config — rexglue auto-creates graphics backend
+    // Set up window context so presenter has a window to render to
+    rex::ui::Win32WindowedAppContext appCtx(hInst, nShow);
+    appCtx.Initialize();
+    runtime.set_app_context(&appCtx);
+
     auto status = runtime.Setup(PPCImageConfig, rex::RuntimeConfig{});
     if (status != 0) { g_log << "Setup failed: 0x" << std::hex << status << std::endl; return 1; }
 
@@ -134,10 +138,12 @@ int main() {
     g_log << "Render scan complete" << std::endl;
     g_log.flush();
 
-    // Keep main thread alive while game runs (no external window context)
-    g_log << "Main thread waiting..." << std::endl;
+    // Run Windows message loop — required for rexglue window to appear
+    g_log << "Running message loop..." << std::endl;
     g_log.flush();
-    while (true) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+    vblankStop.store(true); vblankThread.join();
+    int result = appCtx.RunMainMessageLoop();
+    g_log << "Exit: " << result << std::endl;
     CoUninitialize();
-    return 0;
+    return result;
 }
