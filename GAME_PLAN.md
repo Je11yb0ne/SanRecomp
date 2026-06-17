@@ -117,7 +117,12 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 - ✅ exe 启动验证：无 DLL 缺失、无系统死机、XEX 加载正常
 - ✅ 创建 `REXRUNTIME_FIX_AND_PROJECT_PLAN.md` — 7 阶段完整规划
 - 🔧 **策略决定**：rexglue 作为参考源码（内核/Vulkan/PM4），不改运行时
-- 🔧 **下一步**：Phase 3（补齐内核同步）+ Phase 5（GPU 状态结构逆向）
+- ✅ **Phase 3 完成**：内核同步/计时器服务补全
+  - KePulseEvent、KeInitializeEvent（新实现）
+  - Timer 内核对象类 + NtCreateTimer/NtSetTimerEx/NtCancelTimer
+  - KeInitializeTimerEx/KeSetTimerEx/KeCancelTimer
+  - KeWaitForMultipleObjects 修复（从 always-success → 真正的 WaitAll/WaitAny 轮询）
+- 🔧 **下一步**：Phase 5（GPU 状态结构逆向）
 
 ### 2026-06-16 (Session — Vulkan 迁移 + 渲染循环)
 - ✅ 研究 refs/ 所有项目渲染后端
