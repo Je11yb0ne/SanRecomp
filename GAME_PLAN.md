@@ -122,7 +122,14 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
   - Timer 内核对象类 + NtCreateTimer/NtSetTimerEx/NtCancelTimer
   - KeInitializeTimerEx/KeSetTimerEx/KeCancelTimer
   - KeWaitForMultipleObjects 修复（从 always-success → 真正的 WaitAll/WaitAny 轮询）
-- 🔧 **下一步**：Phase 5（GPU 状态结构逆向）
+- ✅ **Phase 5 调查完成**：GPU 诊断钩子 + PM4 环形缓冲区扫描
+  - 添加 D3D 诊断钩子（CreateTexture、DrawIndexedPrimitive 等 8 个函数）
+  - 添加 VdSwap 中 PM4 环形缓冲区扫描
+  - **关键发现**：GTA V 不调用 D3D wrapper 函数，也不写 PM4 命令缓冲
+  - VdSwap 每帧调用（游戏认为自己渲染了），但无实际绘制
+  - TDURE 参考项目调查（rexglue 0.7.4 完整集成，仅 D3D12）
+  - Xbox-360-Crypto 参考调查（Python crypto，对我们无用）
+- 🔧 **下一步**：调查游戏 GPU 初始化缺失了什么 → 让游戏开始画东西
 
 ### 2026-06-16 (Session — Vulkan 迁移 + 渲染循环)
 - ✅ 研究 refs/ 所有项目渲染后端
