@@ -106,6 +106,19 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 - ⚠️ 环形缓冲区仍为空 — 崩溃前未写入 PM4 命令
 - 🔧 下一步：对 0x83830000 处的图形状态结构进行 IDA 逆向工程
 
+### 2026-06-17 (Session — rexglue 混合架构实验 + 回退)
+
+- ⚠️ rexglue 混合架构（rexglue PPC 文件 + XenonRecomp 运行时）导致系统死机
+- ✅ **根因分析**：rexglue PPC 文件（`rex::ppc::PPCContext`）与旧运行时不兼容
+- ✅ `dumpbin` 确认 WinRT DLL 依赖来自 `media_win32.cpp`（非 rexruntime）
+- ✅ `media_win32.cpp` WinRT GSMTC → stub（去 `api-ms-win-core-winrt-error` 依赖）
+- ✅ `dxcompiler.dll` + `dxil.dll` 部署到 exe 目录
+- ✅ 回退到 XenonRecomp 纯版本（分支 `feature/xenonrecomp-phase9`）
+- ✅ exe 启动验证：无 DLL 缺失、无系统死机、XEX 加载正常
+- ✅ 创建 `REXRUNTIME_FIX_AND_PROJECT_PLAN.md` — 7 阶段完整规划
+- 🔧 **策略决定**：rexglue 作为参考源码（内核/Vulkan/PM4），不改运行时
+- 🔧 **下一步**：Phase 3（补齐内核同步）+ Phase 5（GPU 状态结构逆向）
+
 ### 2026-06-16 (Session — Vulkan 迁移 + 渲染循环)
 - ✅ 研究 refs/ 所有项目渲染后端
 - ✅ Vulkan 后端启用，D3D12 代码路径替换

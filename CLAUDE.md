@@ -143,7 +143,8 @@ These were manually switched from defaults:
 
 - **Remote**: `origin` = `git@github.com:Je11yb0ne/SanRecomp.git` (fork of OZORDI/SanRecomp)
 - **Upstream**: `git@github.com:OZORDI/SanRecomp.git`
-- **Branch**: `main` (local), backup branches at `claude-code/github-backup-*`
+- **Branch**: `feature/xenonrecomp-phase9` (active), `feature/rexglue-migration` (archived), `main` (old)
+- **Backup tag**: `backup/pre-rexglue-migration` (clean XenonRecomp state)
 - **Backup naming**: `claude-code/github-backup-YYYYMMDD-HHMMSS`
 - **Push rule**: `git push origin <branch>` after each milestone. NEVER use `git add -A`. Use `git add .` from repo root.
 - All submodules manually cloned (git submodule mechanism broken for this repo)
@@ -268,17 +269,16 @@ REXGLUE="refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe"
 
 ## Next Session Starting Points
 
-1. ⭐ **实现缺失的内核同步服务** — 游戏图形初始化需要 `KeInitializeEvent`, `KeSetTimerEx`, `KePulseEvent` 等。
-   当前游戏 init 完成但图形状态未初始化，导致渲染回调崩溃。需要：
-   - 参考 rexglue-sdk 的内核实现（`refs/rexglue-sdk/src/kernel/`）
-   - 参考 UnleashedRecomp 的内核补丁
-   - 优先实现事件相关的函数（KeInitializeEvent, KeSetEvent, KeWaitForSingleObject 增强）
-2. ⭐ **启用 D3D 函数钩子** — video.cpp 中 `#if 0` 的 GUEST_FUNCTION_HOOK 块（~60 个函数）：
-   - CreateTexture, SetRenderState, DrawIndexedPrimitive 等
-   - 这些钩子可将游戏 D3D 调用翻译为 Vulkan 绘制
-   - 参数布局需要在 IDA 中分析或从 rexglue 对比
-3. **图形状态结构分析** — 0x83830000 处期望的结构布局。sub_822D41E8 以各种偏移量（+48, +23760, +22036, +14012, +16968）读取此结构。
-   需要使用 IDA 进行适当的逆向工程以了解字段。
-4. **全管线崩溃修复** — plume Vulkan 空纹理创建崩溃（0xC0000005），需要调试
-5. **PM4 命令扫描增强** — 环形缓冲区当前为空，但一旦游戏开始渲染，我们将需要 PM4→Vulkan 翻译
-5. **Run XenosRecomp** — 转换 Xbox 360 .fxc shaders 到 DXIL
+**分支**: `feature/xenonrecomp-phase9`（活跃），`feature/rexglue-migration`（归档），`backup/pre-rexglue-migration`（回退标签）
+
+1. ⭐ **Phase 3：补齐内核同步/计时器服务** — `KeInitializeEvent`, `KeSetTimerEx`, `KePulseEvent` 等。
+   - 参考 `refs/rexglue-sdk/src/kernel/` 完整实现（Xenia 内核模型）
+   - 目标：让游戏初始化自然推进，不卡忙等
+2. ⭐ **Phase 5：GPU 初始化与状态结构逆向** — 分析 `0x83830000` 图形状态结构
+   - 恢复 `video.cpp` 中 `#if 0` 的 GUEST_FUNCTION_HOOK 块（~60 个 D3D→Vulkan 翻译函数）
+   - 使用 IDA 对 GTA V default.xex 进行逆向工程
+3. **Phase 1：建立诊断链** — 日志文件、PPC 看门狗、kernel trace、GPU ring buffer trace
+4. **rexglue 作为参考** — 不替换运行时，从 `refs/rexglue-sdk/src/` 参考内核/图形实现
+5. **安全运行** — 永远从 bash 用 `timeout` 运行 exe，先测试 5 秒，确认无系统死机
+
+**详细规划**：`REXRUNTIME_FIX_AND_PROJECT_PLAN.md`（7 阶段）
