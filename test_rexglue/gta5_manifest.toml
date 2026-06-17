@@ -1,0 +1,10 @@
+# GTA V Recompilation Manifest for rexglue-sdk v0.8.1.32
+[project]
+name = "gta5_recomp"
+sdk_version = "0.8.1"
+game_root = "D:/Games/Xenia/gta5"
+
+[entrypoint]
+file_path = "D:/Games/Xenia/gta5/default.xex"
+out_directory_path = "generated/default"
+includes = []
