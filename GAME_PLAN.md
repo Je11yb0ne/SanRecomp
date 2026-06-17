@@ -131,6 +131,14 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
   - Xbox-360-Crypto 参考调查（Python crypto，对我们无用）
 - 🔧 **下一步**：调查游戏 GPU 初始化缺失了什么 → 让游戏开始画东西
 
+### 2026-06-17 (Session 2 — rexglue 正确集成)
+
+- ✅ 读取 rexglue-sdk wiki（Getting-Started、ReXApp、Function-Overrides）
+- ✅ test_rexglue 构建成功（70/70, 197 rexglue PPC 文件 + 预编译 SDK）
+- ✅ 改用 `find_package(rexglue)` + `rex::runtime` 正确链接
+- ✅ GTA5App 简化（TDURE 模式）+ REX_DEFINE_APP 入口
+- 🔧 构建+部署 DLL → 测试启动中
+
 ### 2026-06-16 (Session — Vulkan 迁移 + 渲染循环)
 - ✅ 研究 refs/ 所有项目渲染后端
 - ✅ Vulkan 后端启用，D3D12 代码路径替换

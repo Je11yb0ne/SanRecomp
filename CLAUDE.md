@@ -269,14 +269,15 @@ REXGLUE="refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe"
 
 ## Next Session Starting Points
 
-**分支**: `feature/xenonrecomp-phase9`（活跃），`feature/rexglue-migration`（归档），`backup/pre-rexglue-migration`（回退标签）
+**分支**: `feature/rexglue-source-build`（活跃 — 正确集成 rexglue 预编译 SDK）
 
-1. ⭐ **Phase 3：补齐内核同步/计时器服务** — `KeInitializeEvent`, `KeSetTimerEx`, `KePulseEvent` 等。
-   - 参考 `refs/rexglue-sdk/src/kernel/` 完整实现（Xenia 内核模型）
-   - 目标：让游戏初始化自然推进，不卡忙等
-2. ⭐ **Phase 5：GPU 初始化与状态结构逆向** — 分析 `0x83830000` 图形状态结构
-   - 恢复 `video.cpp` 中 `#if 0` 的 GUEST_FUNCTION_HOOK 块（~60 个 D3D→Vulkan 翻译函数）
-   - 使用 IDA 对 GTA V default.xex 进行逆向工程
+1. ⭐ **rexglue 正确集成** — 用 `find_package(rexglue)` + `rex::runtime` + `REX_DEFINE_APP`
+   - 预编译 SDK v0.8.1.32 在 `tools/rexglue-sdk-0.8.1.32-dev/`
+   - Wiki 在 `refs/rexglue-sdk-wiki/`（已读）
+   - TDURE 参考项目在 `refs/TDURE-main/`
+   - 197 个 rexglue 代码生成文件在 `test_rexglue/generated/default/`
+2. **XenonRecomp 路径已归档** — `feature/xenonrecomp-phase9` 保留了 GPU MMIO 拦截 + EDRAM→Vulkan 管线成果
+3. **备份标签**: `backup/pre-rexglue-migration`（干净 XenonRecomp 状态）
 3. **Phase 1：建立诊断链** — 日志文件、PPC 看门狗、kernel trace、GPU ring buffer trace
 4. **rexglue 作为参考** — 不替换运行时，从 `refs/rexglue-sdk/src/` 参考内核/图形实现
 5. **安全运行** — 永远从 bash 用 `timeout` 运行 exe，先测试 5 秒，确认无系统死机
