@@ -9249,26 +9249,14 @@ GUEST_FUNCTION_HOOK(sub_829D3520, GTAIV_CreateVertexBuffer);
 GUEST_FUNCTION_HOOK(sub_829D3400, GTAIV_CreateTexture);
 #endif
 
-// NOTE: The following hooks are DISABLED because the functions have different  
-// parameter layouts than expected. Need to analyze the actual calling conventions
-// in GTA V's D3D wrapper layer before enabling these.
-#if 0 // DISABLED - parameter layout investigation needed
-// Resource creation functions
-GUEST_FUNCTION_HOOK(sub_829D3400, CreateTexture);  // Allocates 52-byte GuestTexture struct
-GUEST_FUNCTION_HOOK(sub_829D3520, CreateVertexBuffer);  // Allocates 48-byte GuestBuffer struct
-// TODO: Find CreateIndexBuffer address (likely similar to CreateVertexBuffer pattern)
-
-// Surface descriptor functions
+// NOTE: Hook_CreateTexture and Hook_CreateVertexBuffer (defined below)
+// provide logging wrappers around the real CreateTexture/CreateVertexBuffer.
+// Surface descriptor + buffer locking hooks
 GUEST_FUNCTION_HOOK(sub_829D3648, GetSurfaceDesc);
-
-// Texture locking
 GUEST_FUNCTION_HOOK(sub_829D6560, LockTextureRect);
 GUEST_FUNCTION_HOOK(sub_829D6690, UnlockTextureRect);
-
-// Buffer locking
 GUEST_FUNCTION_HOOK(sub_829D6830, LockVertexBuffer);
 GUEST_FUNCTION_HOOK(sub_829D69D8, UnlockVertexBuffer);
-#endif
 
 // NOTE(GTAIV): Do NOT hook the game's Present wrapper directly to Video::Present.
 // GTA V's Present wrapper (sub_829D5388) calls the VdSwap import; we already hook

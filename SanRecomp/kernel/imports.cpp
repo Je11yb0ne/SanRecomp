@@ -4969,10 +4969,27 @@ void VBlankTimerThread() {
             DumpGpuCapture();
         }
 
-        // Periodically scan for PM4 commands in guest memory
+        // Scan ring buffer EVERY tick for first 60 ticks, then every 60
+        if (tick <= 60 || tick % 60 == 0) {
+            uint8_t* ringBuf = g_memory.base + g_gpuRingBuffer.ringBufferBase;
+            uint32_t firstNonZero = 0;
+            bool hasData = false;
+            for (uint32_t i = 0; i < 256; i++) {
+                if (ringBuf[i] != 0) { firstNonZero = i; hasData = true; break; }
+            }
+            if (hasData && tick > 5) {
+                printf("[VBlank-Thread] TICK %d: RING BUFFER HAS DATA! First byte at offset %d\n", tick, firstNonZero);
+                for (int j = 0; j < 64 && j + firstNonZero < 256; j += 4) {
+                    uint32_t v = __builtin_bswap32(*(uint32_t*)(ringBuf + firstNonZero + j));
+                    printf("  [%03X] %08X\n", firstNonZero + j, v);
+                }
+                fflush(stdout);
+            }
+        }
+
+        // Full scan at specific ticks
         if (tick == 10 || tick == 20 || tick == 30) {
-            printf("[VBlank-Thread] Scanning for PM4 commands at tick %d...\n", tick);
-            // Scan multiple common Xbox 360 GPU buffer addresses
+            printf("[VBlank-Thread] Full scan at tick %d...\n", tick);
             static const uint32_t scanAddrs[] = {
                 0x00000000, 0x83000000, 0x83E00000, 0x7FC80000,
                 0x40000000, 0x83800000, 0x83700000, 0x84000000
