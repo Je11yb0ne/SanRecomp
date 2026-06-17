@@ -475,6 +475,34 @@ if (WIN32)
     )
 endif()
 
+# ============================================================================
+# REXGLUE MIGRATION: Pre-built rexglue SDK libraries
+# ============================================================================
+set(REXGLUE_LIB_DIR "${CMAKE_SOURCE_DIR}/tools/rexglue-sdk-0.8.1.32-dev.gf22cd9d-win-amd64/lib")
+target_link_directories(SanRecomp PRIVATE "${REXGLUE_LIB_DIR}")
+
+target_link_libraries(SanRecomp PRIVATE
+    # Core runtime (kernel, threading, memory, MMIO)
+    # NOTE: Use rexruntimerd — the rexruntime.dll release build has
+    # api-ms-win-core-winrt-error dependency not on our system.
+    rexruntimerd
+    # Windowing/input
+    SDL3-staticrd
+    # Audio codecs
+    libavcodecrd
+    libavutilrd
+    # Utilities
+    fmtrd
+    spdlogrd
+    snappyrd
+    xxhashrd
+    o1heaprd
+    aes128rd
+    disasmrd
+    mspackrd
+    TracyClientrd
+)
+
 ##DISABLEDtarget_link_libraries(SanRecomp PRIVATE
 #    fmt::fmt
 #    libzstd_static
@@ -540,6 +568,8 @@ target_include_directories(SanRecomp PRIVATE
 	    "${CMAKE_CURRENT_SOURCE_DIR}/../SanRecompLib"
             CURL::libcurl
     ${SAN_RECOMP_THIRDPARTY_INCLUDES}
+    # rexglue SDK
+    "${CMAKE_SOURCE_DIR}/tools/rexglue-sdk-0.8.1.32-dev.gf22cd9d-win-amd64/include"
 )
 
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")

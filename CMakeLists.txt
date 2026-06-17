@@ -6,8 +6,14 @@ endif()
 
 set(SAN_RECOMP_THIRDPARTY_ROOT ${CMAKE_SOURCE_DIR}/thirdparty)
 set(SAN_RECOMP_TOOLS_ROOT ${CMAKE_SOURCE_DIR}/tools)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)  # Required by rexglue-sdk v0.8.1
 set(BUILD_SHARED_LIBS OFF)
+
+# rexglue-sdk requires C++ exceptions and external fmt
+add_compile_definitions(SPDLOG_FMT_EXTERNAL)
+if (WIN32)
+    add_compile_options(/EHa)  # Full C++ exception handling
+endif()
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
@@ -15,7 +21,7 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")  # /MD to match rexglue pre-built libs
 
 project("SanRecomp-ALL")
 

@@ -1,5 +1,10 @@
 project("SanRecompLib")
 
+# ============================================================================
+# REXGLUE MIGRATION: Replaced XenonRecomp PPC code with rexglue-generated code
+# Backup: git checkout backup/pre-rexglue-migration to revert
+# ============================================================================
+
 add_compile_options(
     -fno-strict-aliasing
 )
@@ -10,20 +15,19 @@ else()
     add_compile_options(-ffp-model=strict)
 endif()
 
-# target_compile_definitions(XenonRecomp PRIVATE 
-#    XENON_RECOMP_CONFIG_FILE_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/config/GTA5.toml\"
-#    XENON_RECOMP_HEADER_FILE_PATH=\"${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/ppc_context.h\")
+# rexglue SDK path (relative to repo root)
+set(REXGLUE_SDK_ROOT "${CMAKE_SOURCE_DIR}/tools/rexglue-sdk-0.8.1.32-dev.gf22cd9d-win-amd64")
 
+# rexglue-generated PPC source files (197 files from codegen)
 set(SAN_RECOMP_PPC_RECOMPILED_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_config.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_context.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_func_mapping.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_recomp_shared.h"
 )
 
-foreach(i RANGE 0 545)
-    list(APPEND SAN_RECOMP_PPC_RECOMPILED_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/ppc/ppc_recomp.${i}.cpp")
-endforeach()
+# Add all rexglue-generated .cpp files
+file(GLOB REXGLUE_GENERATED_SOURCES
+    "${CMAKE_SOURCE_DIR}/test_rexglue/generated/default/*.cpp"
+)
+list(APPEND SAN_RECOMP_PPC_RECOMPILED_SOURCES ${REXGLUE_GENERATED_SOURCES})
 
 # XenonRecomp custom command disabled - PPC files already generated
 # To regenerate, run manually:
@@ -90,12 +94,18 @@ message(STATUS "SanRecompLib sources count: ${SAN_RECOMP_PPC_RECOMPILED_SOURCES}
 
 add_library(SanRecompLib
     ${SAN_RECOMP_PPC_RECOMPILED_SOURCES}
-    "ppc/ppc_indirect.cpp"
     "shader/shader_cache.h"
     "shader/shader_cache.cpp"
 )
 
-target_include_directories(SanRecompLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# rexglue SDK headers (PPCContext, kernel, graphics, etc.)
+target_include_directories(SanRecompLib PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    "${REXGLUE_SDK_ROOT}/include"
+)
 target_include_directories(SanRecompLib PRIVATE "${SAN_RECOMP_TOOLS_ROOT}/XenonRecomp/thirdparty/simde")
-target_compile_definitions(SanRecompLib PRIVATE PPC_MMIO_DEBUG)
-target_precompile_headers(SanRecompLib PUBLIC "ppc/ppc_recomp_shared.h")
+target_compile_definitions(SanRecompLib PRIVATE
+    SPDLOG_FMT_EXTERNAL
+)
+# Precompiled header disabled for rexglue — each .cpp includes its own init.h
+# target_precompile_headers(SanRecompLib PUBLIC "ppc/ppc_recomp_shared.h")
