@@ -4928,8 +4928,8 @@ void VBlankTimerThread() {
             printf("[VBlank-Thread] Scanning for PM4 commands at tick %d...\n", tick);
             // Scan multiple common Xbox 360 GPU buffer addresses
             static const uint32_t scanAddrs[] = {
-                0x83000000, 0x83E00000, 0x7FC80000, 0x40000000,
-                0x83800000, 0x83700000, 0x84000000
+                0x00000000, 0x83000000, 0x83E00000, 0x7FC80000,
+                0x40000000, 0x83800000, 0x83700000, 0x84000000
             };
             for (uint32_t addr : scanAddrs) {
                 uint32_t* buf = (uint32_t*)(g_memory.base + addr);
