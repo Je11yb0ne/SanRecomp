@@ -4855,14 +4855,33 @@ void FireVBlankCallback() {
             ctx.r3.u32 = g_gpuRingBuffer.interruptUserData;
             ctx.r4.u32 = 0;
 
-            // Call our SEH-protected wrapper (not the raw dispatch table pointer)
-            // This ensures the crash is caught by sub_822D41E8's __try/__except
-            extern void sub_822D41E8(PPCContext&, uint8_t*);
-            __try {
-                sub_822D41E8(ctx, g_memory.base);
-            } __except(EXCEPTION_EXECUTE_HANDLER) {
-                if (fireCount <= 3) {
-                    printf("[VBlank-Fire] #%d callback CRASHED! Code=0x%08X\n",
+            // Draw a test pattern to the framebuffer BEFORE calling the game callback
+        // This verifies the display pipeline works
+        if (fireCount <= 10) {
+            uint8_t* fb = g_memory.base + 0xE0000000;
+            // Draw colored horizontal stripes
+            for (int y = 0; y < 720; y++) {
+                uint8_t r = (y < 240) ? 0xFF : 0x00;
+                uint8_t g = (y >= 240 && y < 480) ? 0xFF : 0x00;
+                uint8_t b = (y >= 480) ? 0xFF : 0x00;
+                for (int x = 0; x < 1280; x++) {
+                    int idx = (y * 1280 + x) * 4;
+                    fb[idx + 0] = b;  // B
+                    fb[idx + 1] = g;  // G
+                    fb[idx + 2] = r;  // R
+                    fb[idx + 3] = 0xFF; // A
+                }
+            }
+        }
+
+        // Call our SEH-protected wrapper (not the raw dispatch table pointer)
+        // This ensures the crash is caught by sub_822D41E8's __try/__except
+        extern void sub_822D41E8(PPCContext&, uint8_t*);
+        __try {
+            sub_822D41E8(ctx, g_memory.base);
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
+            if (fireCount <= 3) {
+                printf("[VBlank-Fire] #%d callback CRASHED! Code=0x%08X\n",
                         fireCount, GetExceptionCode());
                     fflush(stdout);
                 }
@@ -4998,7 +5017,7 @@ static void InitVBlankPCR() {
     uint8_t* base = g_memory.base;
     // PCR at 0x82001000 — past the null-page sentinel
     uint32_t pcrBase = 0x82001000;
-    PPC_STORE_U32(pcrBase + 0x00, 0);           // tls_ptr = 0 (no TLS for VBlank)
+    PPC_STORE_U32(pcrBase + 0x00, pcrBase);     // tls_ptr = PCR (point to self, so TLS+312 = PCR+312)
     PPC_STORE_U32(pcrBase + 0x30, pcrBase);     // pcr_ptr = self
     PPC_STORE_U32(pcrBase + 0x70, 0x10000000);  // stack_base
     PPC_STORE_U32(pcrBase + 0x74, 0x0FF00000);  // stack_limit
