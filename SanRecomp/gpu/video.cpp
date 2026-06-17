@@ -3645,30 +3645,53 @@ void Video::PrepareFrameAndPresent()
     cmdList->setFramebuffer(framebuffer.get());
 
     if (hasGuestFB) {
-        // Upload guest EDRAM framebuffer to swapchain via staging
+        // Scan entire EDRAM (10MB) for non-gray pixels
+        static int scanDone = 0;
+        if (scanDone < 3) {
+            scanDone++;
+            uint8_t* edram = g_memory.base + 0xE0000000;
+            int totalNonGray = 0;
+            uint32_t firstNonGray = 0;
+            for (uint32_t off = 0; off < 10 * 1024 * 1024; off += 4) {
+                if (edram[off] != 0x80 || edram[off+1] != 0x80 ||
+                    edram[off+2] != 0x80 || edram[off+3] != 0x80) {
+                    if (totalNonGray == 0) firstNonGray = off;
+                    totalNonGray++;
+                }
+            }
+            if (totalNonGray > 0) {
+                printf("[PrepFrame] EDRAM has %d non-gray pixels! First at 0x%X\n", totalNonGray, firstNonGray);
+                // Dump first 16 pixels
+                for (int i = 0; i < 16 && i*4 < 256; i++) {
+                    uint32_t off = firstNonGray + i*4;
+                    printf("  [0x%X] %02X%02X%02X%02X\n", off,
+                           edram[off], edram[off+1], edram[off+2], edram[off+3]);
+                }
+            } else {
+                printf("[PrepFrame] All 10MB EDRAM is gray — game never rendered\n");
+            }
+            fflush(stdout);
+        }
+
+        // Upload EDRAM framebuffer to swapchain
         uint8_t* guestPixels = g_memory.base + guestFB;
         uint32_t rowPitch = 1280 * 4;
         uint32_t slicePitch = rowPitch * 720;
-
-        // Create staging upload buffer
         auto uploadBuf = g_device->createBuffer(RenderBufferDesc::UploadBuffer(slicePitch));
         if (uploadBuf) {
             uint8_t* mapped = (uint8_t*)uploadBuf->map();
             if (mapped) {
-                // Copy guest pixels (BGRA → RGBA for Vulkan)
                 for (int y = 0; y < 720; y++) {
                     for (int x = 0; x < 1280; x++) {
                         int srcIdx = (y * 1280 + x) * 4;
                         int dstIdx = y * rowPitch + x * 4;
-                        mapped[dstIdx + 0] = guestPixels[srcIdx + 2]; // R ← B
-                        mapped[dstIdx + 1] = guestPixels[srcIdx + 1]; // G ← G
-                        mapped[dstIdx + 2] = guestPixels[srcIdx + 0]; // B ← R
-                        mapped[dstIdx + 3] = guestPixels[srcIdx + 3]; // A ← A
+                        mapped[dstIdx + 0] = guestPixels[srcIdx + 2];
+                        mapped[dstIdx + 1] = guestPixels[srcIdx + 1];
+                        mapped[dstIdx + 2] = guestPixels[srcIdx + 0];
+                        mapped[dstIdx + 3] = guestPixels[srcIdx + 3];
                     }
                 }
                 uploadBuf->unmap();
-
-                // Barrier to COPY_DEST, copy, barrier back to PRESENT
                 cmdList->barriers(RenderBarrierStage::COPY,
                     RenderTextureBarrier(swapChainTex, RenderTextureLayout::COPY_DEST));
                 cmdList->copyTextureRegion(
@@ -3679,10 +3702,6 @@ void Video::PrepareFrameAndPresent()
                 cmdList->barriers(RenderBarrierStage::COPY,
                     RenderTextureBarrier(swapChainTex, RenderTextureLayout::PRESENT));
             }
-        }
-        if (frameCount == 1) {
-            printf("[PrepFrame] EDRAM→Swapchain copy OK!\n");
-            fflush(stdout);
         }
     }
     else {
