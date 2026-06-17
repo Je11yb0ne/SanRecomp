@@ -54,8 +54,8 @@ int main() {
 
     rex::Runtime runtime(gameRoot, userRoot);
 
-    printf("Setting up runtime (tool_mode=true, skip GPU)...\n");
-    auto status = runtime.Setup(PPCImageConfig, rex::RuntimeConfig{.tool_mode = true});
+    printf("Setting up runtime (GPU enabled)...\n");
+    auto status = runtime.Setup(PPCImageConfig, rex::RuntimeConfig{});
     if (status != 0) {
         printf("Runtime setup failed: 0x%08X\n", (unsigned)status);
         return 1;
