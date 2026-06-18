@@ -193,6 +193,30 @@ GPU 渲染线程 `sub_836BEEA0`：`LEAVE_GLOBAL_LOCK → KeWaitForSingleObject(�
 
 **下一步**：诊断输入轮询后的空指针崩溃（mem=0x8）。VEH 不提交 <0x10000 的地址（真空指针，非未提交页）。需 guest 侧 instrument 定位崩溃的游戏函数。
 
+**🎉🎉 游戏到达渲染循环！（2026-06-19）VdSwap 60Hz 被调用**
+
+崩溃根因（接力 systematic-debugging）：
+- CrashHandler 加 guest 上下文 → 崩溃在 tid=6，`XamInputGetState`（thunk sub_8363DA08）内部 null+8
+- `runtime.input_system()` 非空，但输入**驱动**用 null 窗口创建（`SDLInputDriver(nullptr,0)`），靠 `AttachWindow` 后补窗口
+- **我们从没调用 `AttachWindow`** → 驱动 null 窗口被解引用崩溃。ReXApp 在 SetupPresentation（rex_app.cpp:199）调用它，我们手动 setup 漏了
+
+修复（main.cpp 窗口创建后加）：
+```cpp
+static_cast<rex::input::InputSystem*>(runtime.input_system())->AttachWindow(window.get());
+```
+
+**结果（本会话最大成果）：**
+- ✅ 无崩溃
+- ✅ **渲染函数 sub_822D41E8 被 60Hz 调用（VdSwap！）—— 游戏到达渲染循环**
+- ✅ **988 次信号量 RELEASE**（之前恒 0）—— 全线程正常工作
+- ✅ 主线程活跃执行游戏代码（不再卡 wait）
+
+**完整修复链（死锁→渲染）= 补全 ReXApp 的手动等价物：**
+1. `cfg.audio_factory` + `cfg.input_factory` + `cfg.kernel_init`（破死锁）
+2. `input_system()->AttachWindow(window)`（破输入崩溃）
+
+**下一步**：窗口是否显示 GTA V 画面？VdSwap 在调用 = 游戏认为在渲染。若仍黑屏，查 GPU 命令是否被 rexglue 命令处理器翻译/呈现。
+
 ### 2026-06-17 (Phase 9 — GPU 命令翻译 WIP)
 - ✅ SPIR-V 着色器编译：DXC 将 22 个 HLSL → SPIR-V .h 文件
 - ✅ video.cpp SPIR-V 包含解除 + CREATE_SHADER 宏修复 Windows+Vulkan

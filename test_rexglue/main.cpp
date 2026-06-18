@@ -140,11 +140,20 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* i) {
     uintptr_t code = i->ExceptionRecord->ExceptionCode;
     uintptr_t addr = i->ExceptionRecord->ExceptionAddress ? (uintptr_t)i->ExceptionRecord->ExceptionAddress : 0;
     uintptr_t mem = (code == 0xC0000005) ? i->ExceptionRecord->ExceptionInformation[1] : 0;
-    fprintf(stderr, "\n!!! CRASH: code=0x%lX addr=0x%lX mem=0x%lX\n",
-        (unsigned long)code, (unsigned long)addr, (unsigned long)mem);
+    // Capture the crashing guest thread's PPC context to locate the guest fn.
+    uint64_t glr = 0; uint32_t gr1 = 0, gr3 = 0, gtid = 0;
+    auto* t = rex::system::XThread::GetCurrentThread();
+    if (t && t->thread_state() && t->thread_state()->context()) {
+        auto* c = t->thread_state()->context();
+        glr = c->lr; gr1 = c->r1.u32; gr3 = c->r3.u32; gtid = t->thread_id();
+    }
+    fprintf(stderr, "\n!!! CRASH: code=0x%lX addr=0x%lX mem=0x%lX | guest tid=%X lr=0x%llX r1=0x%X r3=0x%X\n",
+        (unsigned long)code, (unsigned long)addr, (unsigned long)mem,
+        gtid, (unsigned long long)glr, gr1, gr3);
     FILE* f = fopen("gta5_rexglue_crash.txt", "w");
-    if (f) { fprintf(f, "code=0x%lX addr=0x%lX mem=0x%lX\n",
-        (unsigned long)code, (unsigned long)addr, (unsigned long)mem); fclose(f); }
+    if (f) { fprintf(f, "code=0x%lX addr=0x%lX mem=0x%lX\nguest tid=%X lr=0x%llX r1=0x%X r3=0x%X\n",
+        (unsigned long)code, (unsigned long)addr, (unsigned long)mem,
+        gtid, (unsigned long long)glr, gr1, gr3); fclose(f); }
     return EXCEPTION_EXECUTE_HANDLER;
 }
 #endif
@@ -208,6 +217,8 @@ int main() {
     fprintf(stderr, "[3/5] Setup OK, graphics=%s, presenter=%s\n",
         gs ? "YES" : "NO",
         (gs && gs->presenter()) ? "YES" : "NO");
+    fprintf(stderr, "[diag] input_system=%p audio_system=%p\n",
+        (void*)runtime.input_system(), (void*)runtime.audio_system());
 
     // 4. Create window and connect presenter
     auto window = rex::ui::Window::Create(app_context, "GTA V (rexglue Vulkan)", 1280, 720);
@@ -220,7 +231,15 @@ int main() {
     if (gs && gs->presenter()) {
         window->SetPresenter(gs->presenter());
     }
-    fprintf(stderr, "[4/5] Window opened\n");
+    // Attach the window to the input system — input drivers are created with a
+    // null window and need this to avoid a null-deref in XamInputGetState.
+    // (ReXApp does this in SetupPresentation; our manual setup was missing it.)
+    if (auto* is = static_cast<rex::input::InputSystem*>(runtime.input_system())) {
+        is->AttachWindow(window.get());
+        fprintf(stderr, "[4/5] Window opened + input attached\n");
+    } else {
+        fprintf(stderr, "[4/5] Window opened (no input system!)\n");
+    }
 
     // 5. Load XEX and launch game
     status = runtime.LoadXexImage("game:\\default.xex");
