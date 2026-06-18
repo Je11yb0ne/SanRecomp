@@ -7,6 +7,7 @@
 #include <rex/ui/windowed_app_context_win.h>
 #include <rex/hook.h>
 #include <rex/logging.h>
+#include <rex/system/function_dispatcher.h>
 #include <cstdio>
 #include <cstdint>
 #include <filesystem>
@@ -14,6 +15,33 @@
 #include <atomic>
 #include <thread>
 #include <chrono>
+#include <set>
+#include <mutex>
+
+// === BATCH COLLECTOR: override ResolveIndirectFunction ===
+// The recompiler misses some indirect-call targets (function entries reached
+// only via vtable/function-pointer). The stock runtime FATALs on the first
+// one. We override the resolver to instead log every missing address and
+// return a no-op stub, so a single run surfaces ALL missing functions. They
+// then get batch-added to gta5_manifest.toml [entrypoint.functions].
+static void NoOpMissingStub(PPCContext& ctx, uint8_t* base) { (void)ctx; (void)base; }
+namespace rex::runtime {
+PPCFunc* ResolveIndirectFunction(uint32_t guest_address) {
+    auto* rt = rex::Runtime::instance();
+    if (rt && rt->function_dispatcher()) {
+        PPCFunc* f = rt->function_dispatcher()->GetFunction(guest_address);
+        if (f) return f;
+    }
+    static std::mutex mtx;
+    static std::set<uint32_t> seen;
+    std::lock_guard<std::mutex> lk(mtx);
+    if (seen.insert(guest_address).second) {
+        FILE* f = fopen("gta5_missing_funcs.txt", "a");
+        if (f) { fprintf(f, "0x%08X\n", guest_address); fclose(f); }
+    }
+    return &NoOpMissingStub;
+}
+}  // namespace rex::runtime
 
 // === DIAGNOSTIC: render-loop detection ===
 // sub_822D41E8 is the GTA V render function that calls VdSwap. If this is

@@ -21,3 +21,4 @@ includes = []
 # Runtime-discovered missing functions (indirect-call targets codegen can't see
 # statically). Added as the game reveals them during init.
 0x836E9A58 = { end = "0x836E9A80" }
+0x836E9A70 = { end = "0x836E9A80" }

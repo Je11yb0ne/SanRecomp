@@ -113,6 +113,19 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 
 **构建系统教训：`.ninja_deps` 被中途杀构建/截断管道损坏 → 每次全量重编 197 文件。修复：删 `.ninja_deps`+`.ninja_log` 后做一次完整不中断构建；之后增量构建正常。绝不中途杀 ninja。**
 
+**🟢 修复已实施 + 游戏推进到完整 init（2026-06-18 深夜）**
+
+- ✅ schema 修正：嵌套 manifest 必须用 `[entrypoint.functions]`（不是顶层 `[functions]`），`end` 用引号字符串
+- ✅ 加了 5 个缺失函数（静态 4 + 运行时发现的 0x836E9A58、0x836E9A70）→ 0 个 FATAL
+- ✅ **main.cpp 覆盖 `rex::runtime::ResolveIndirectFunction`** 作批量收集器：缺失函数不再 FATAL，而是记录到 `gta5_missing_funcs.txt` + 返回空 stub（链接通过，无重复符号）
+- ✅ **游戏现在跑完整早期 init**：Bink 视频线程(BinkAsy1)、XamNotifyCreateListener、XamContentCreateEnumerator、**SetInterruptCallback(836B1768) 注册 GPU 中断回调**（渲染路径！）
+- ⚠️ **新阻塞：游戏在 SetInterruptCallback 后挂起**（39s 无内核活动）— 疑似等 VBlank/GPU 中断触发回调（同 Phase 8 模式），或等 gameconfig.xml 加载
+- ⚠️ `game:\common\data\gameconfig.xml` VFS 未找到（GTA V 数据在 .rpf 归档）
+
+**IDA 调查结论（不可行）**：那个 106MB `.i64` 只有 1 段（0x0，原始压缩 XEX 当扁平数据）+ 1 函数——从没用 XEX loader 正确加载/分析。两个 IDA 安装都没 Xbox360 XEX loader。MCP 的 idalib（C:\software\IDAPRO 补丁版）也读不了。要用 IDA 需编译 idaxex 匹配 9.3 SDK + 正确加载 + 数小时分析，不值得。**缺失函数只能运行时逐个发现（稀疏，可控）。**
+
+**下一步**：诊断 SetInterruptCallback 后的挂起 — rexglue GPU vsync worker 是否 DispatchInterruptCallback 触发游戏回调 836B1768？游戏在等什么 GPU 状态？
+
 ### 2026-06-17 (Phase 9 — GPU 命令翻译 WIP)
 - ✅ SPIR-V 着色器编译：DXC 将 22 个 HLSL → SPIR-V .h 文件
 - ✅ video.cpp SPIR-V 包含解除 + CREATE_SHADER 宏修复 Windows+Vulkan
