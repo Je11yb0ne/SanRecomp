@@ -8,6 +8,9 @@
 #include <rex/hook.h>
 #include <rex/logging.h>
 #include <rex/system/function_dispatcher.h>
+#include <rex/system/kernel_state.h>
+#include <rex/system/xobject.h>
+#include <rex/system/util/object_table.h>
 #include <cstdio>
 #include <cstdint>
 #include <filesystem>
@@ -73,6 +76,26 @@ REX_HOOK_RAW(xstart) {
     __imp__xstart(ctx, base);
     f = fopen("gta5_xstart.txt", "a");
     if (f) { fprintf(f, "xstart RETURNED\n"); fclose(f); }
+}
+
+// === DIAGNOSTIC: GPU interrupt callback probe ===
+// 0x836B1768 is the GPU interrupt handler the game registered via
+// SetInterruptCallback. If rexglue's vsync worker dispatches VBlank, this
+// fires every frame. If it never fires, the dispatch path is broken.
+REX_EXTERN(__imp__sub_836B1768);
+static std::atomic<uint64_t> g_irqCount{0};
+REX_HOOK_RAW(sub_836B1768) {
+    uint64_t n = g_irqCount.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (n == 1 || n % 60 == 0) {
+        FILE* f = fopen("gta5_irq.txt", "a");
+        if (f) {
+            fprintf(f, "GPU interrupt cb sub_836B1768 fired: count=%llu r3=0x%llX r4=0x%llX\n",
+                (unsigned long long)n,
+                (unsigned long long)ctx.r3.u64, (unsigned long long)ctx.r4.u64);
+            fclose(f);
+        }
+    }
+    __imp__sub_836B1768(ctx, base);
 }
 
 #ifdef _WIN32
@@ -176,6 +199,51 @@ int main() {
     log << "Launched" << std::endl;
     log.flush();
     fprintf(stderr, "[5/5] XEX loaded + Launched\nEntering message loop...\n");
+
+    // Watchdog: sample the main guest thread's context to locate the hang.
+    // Recompiled code has no live PC, but lr (last call return addr), r1
+    // (stack ptr) and last_indirect_target pinpoint a busy-wait region.
+    rex::system::XThread* mainThread = thread.get();
+    std::thread watchdog([mainThread]{
+        bool dumped = false;
+        for (int s = 1; ; ++s) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            PPCContext* c = mainThread ? mainThread->thread_state()->context() : nullptr;
+            FILE* f = fopen("gta5_mainthread.txt", "a");
+            if (f && c) {
+                fprintf(f, "t=%2ds lr=0x%08llX r1=0x%08X ctr=0x%08X indir=0x%08X r3=0x%08X r11=0x%08X\n",
+                    s, (unsigned long long)c->lr, c->r1.u32, c->ctr.u32,
+                    c->last_indirect_target, c->r3.u32, c->r11.u32);
+                fclose(f);
+            }
+            // One-time dump: what object is the main thread waiting on + all threads.
+            if (!dumped && s >= 3) {
+                dumped = true;
+                auto* ks = rex::Runtime::instance() ? rex::Runtime::instance()->kernel_state() : nullptr;
+                FILE* g = fopen("gta5_objdump.txt", "w");
+                if (g && ks && c) {
+                    uint32_t waitHandle = c->r3.u32;
+                    auto obj = ks->object_table()->LookupObject<rex::system::XObject>(waitHandle);
+                    fprintf(g, "main wait handle 0x%08X -> type=%u name='%s'\n",
+                        waitHandle, obj ? (unsigned)obj->type() : 999u,
+                        obj ? obj->name().c_str() : "(null)");
+                    auto threads = ks->object_table()->GetObjectsByType<rex::system::XThread>(
+                        rex::system::XObject::Type::Thread);
+                    fprintf(g, "threads=%zu\n", threads.size());
+                    for (auto& t : threads) {
+                        if (!t) continue;
+                        PPCContext* tc = t->thread_state() ? t->thread_state()->context() : nullptr;
+                        fprintf(g, "  thread '%s' id=%X lr=0x%08llX r1=0x%08X r3=0x%08X\n",
+                            t->name().c_str(), t->thread_id(),
+                            tc ? (unsigned long long)tc->lr : 0ull,
+                            tc ? tc->r1.u32 : 0u, tc ? tc->r3.u32 : 0u);
+                    }
+                    fclose(g);
+                }
+            }
+        }
+    });
+    watchdog.detach();
 
     // 7. Windows message loop
     int result = app_context.RunMainMessageLoop();

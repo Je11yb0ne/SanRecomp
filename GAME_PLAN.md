@@ -126,6 +126,22 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 
 **下一步**：诊断 SetInterruptCallback 后的挂起 — rexglue GPU vsync worker 是否 DispatchInterruptCallback 触发游戏回调 836B1768？游戏在等什么 GPU 状态？
 
+**🟢 VBlank 派发已确认 + 全线程死锁定位（2026-06-18 深夜2）**
+
+- ✅ **rexglue 确实 60Hz 派发 VBlank** 给游戏中断回调 sub_836B1768（hook 计数：30s 内 1620+ 次 ≈54Hz，r4=0x4004CD00 正确 user_data）。vsync worker → MarkVblank → DispatchInterruptCallback → ExecuteInterrupt 链路工作。
+- ⚠️ **但 init 仍不前进——根因是多线程同步死锁，不是缺 VBlank**
+- 诊断方法：看门狗线程采样主线程 PPCContext（lr/r1/r3），+ kernel_state object_table dump 所有线程
+- **主线程（id=4）阻塞在 `NtWaitForSingleObjectEx`**（sub_823C7A68 wait 包装，lr=0x823C7AA0），等**信号量句柄 0xF80008F0**（object type=8=Semaphore），22s 完全静止
+- **全部 18 线程都在等**：
+  - id=4~F（12线程）：NtWaitForSingleObjectEx 等各自信号量
+  - id=11/12：KeWaitForSingleObject 等调度对象指针（在 GPU 代码 0x836BExxx）
+  - id=10：**RtlEnterCriticalSection** 等被占的临界区锁（0x820108EC）
+  - id=1/2/3：host 线程（GPU Commands/VSync/Kernel Dispatch）
+- GPU 中断处理器 836B1768 只做自旋锁，不直接释放这些信号量
+- **疑似根因**：(a) 游戏 init 工作线程池死锁——没有线程释放信号量启动工作；或 (b) gameconfig.xml 缺失导致加载线程错误/挂起不发完成信号；或 (c) rexglue 信号量/临界区唤醒有问题
+
+**下一阶段**：解开这个多线程死锁 — 追踪信号量释放路径（谁该 release 0xF80008F0），对比可用 rexglue 项目（TDURE）的线程行为，或检查 gameconfig.xml 加载路径。诊断工具已在 main.cpp（看门狗 + objdump）。
+
 ### 2026-06-17 (Phase 9 — GPU 命令翻译 WIP)
 - ✅ SPIR-V 着色器编译：DXC 将 22 个 HLSL → SPIR-V .h 文件
 - ✅ video.cpp SPIR-V 包含解除 + CREATE_SHADER 宏修复 Windows+Vulkan
