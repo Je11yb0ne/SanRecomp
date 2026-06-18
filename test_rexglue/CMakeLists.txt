@@ -11,10 +11,10 @@ link_directories("${RX}/lib")
 
 file(GLOB REXGLUE_SRCS "generated/default/*.cpp")
 
-add_executable(gta5_rexglue WIN32
+add_executable(gta5_rexglue
     main.cpp polyfills.cpp ${REXGLUE_SRCS})
-target_compile_options(gta5_rexglue PRIVATE /W3 /bigobj /EHa)
-target_compile_definitions(gta5_rexglue PRIVATE SPDLOG_FMT_EXTERNAL)
+target_compile_options(gta5_rexglue PRIVATE /W3 /bigobj /EHa /MD)
+target_compile_definitions(gta5_rexglue PRIVATE SPDLOG_FMT_EXTERNAL _ITERATOR_DEBUG_LEVEL=0 NDEBUG)
 target_link_libraries(gta5_rexglue
     rexruntimerd SDL3-staticrd
     libavcodecrd libavutilrd

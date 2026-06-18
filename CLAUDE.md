@@ -271,19 +271,58 @@ REXGLUE="refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe"
 "$REXGLUE" codegen gta5_config.toml -v --force  # --force 跳过未解析调用
 ```
 
-## Next Session Starting Points
+## Current State (2026-06-18)
 
-**分支**: `feature/rexglue-source-build`（活跃 — 正确集成 rexglue 预编译 SDK）
+**分支**: `feature/rexglue-source-build`
 
-1. ⭐ **rexglue 正确集成** — 用 `find_package(rexglue)` + `rex::runtime` + `REX_DEFINE_APP`
-   - 预编译 SDK v0.8.1.32 在 `tools/rexglue-sdk-0.8.1.32-dev/`
-   - Wiki 在 `refs/rexglue-sdk-wiki/`（已读）
-   - TDURE 参考项目在 `refs/TDURE-main/`
-   - 197 个 rexglue 代码生成文件在 `test_rexglue/generated/default/`
-2. **XenonRecomp 路径已归档** — `feature/xenonrecomp-phase9` 保留了 GPU MMIO 拦截 + EDRAM→Vulkan 管线成果
-3. **备份标签**: `backup/pre-rexglue-migration`（干净 XenonRecomp 状态）
-3. **Phase 1：建立诊断链** — 日志文件、PPC 看门狗、kernel trace、GPU ring buffer trace
-4. **rexglue 作为参考** — 不替换运行时，从 `refs/rexglue-sdk/src/` 参考内核/图形实现
-5. **安全运行** — 永远从 bash 用 `timeout` 运行 exe，先测试 5 秒，确认无系统死机
+### 重大突破：rexglue Vulkan 窗口 + 游戏运行稳定！
 
-**详细规划**：`REXRUNTIME_FIX_AND_PROJECT_PLAN.md`（7 阶段）
+| 里程碑 | 状态 |
+|--------|------|
+| rexglue self-built DLL (Vulkan-only) | ✅ `refs/rexglue-sdk/out/win-amd64/rexruntimerd.dll` |
+| 197 PPC 文件编译+链接 | ✅ `test_rexglue/out/easy/gta5_rexglue.exe` (343MB) |
+| Runtime::Setup() 成功 | ✅ graphics=YES |
+| Vulkan Presenter 创建 | ✅ presenter=YES（关键：必须在 Setup 前设置 app_context） |
+| Win32 窗口弹出 | ✅ 窗口可见 |
+| XEX 加载 + LaunchModule | ✅ 游戏启动 |
+| VEH 页面错误处理 | ✅ AddVectoredExceptionHandler 让游戏稳定运行 15+ 秒 |
+| 游戏渲染画面 | ⚠️ 窗口黑屏 — 游戏可能未提交绘制命令或 swapchain 未正确呈现 |
+
+### 关键架构发现
+
+1. **必须在 Setup 前设置 app_context**：`runtime.set_app_context(&app_context)` → `runtime.Setup()` → `SetupPresentation` 在内部被调用，Presenter 才能创建。
+2. **禁止手动 VirtualAlloc GPU MMIO**：`VirtualAlloc(mem + 0x7FC80000, ...)` 会与 GPU 驱动冲突 → **蓝屏死机**。rexglue 内部处理 MMIO。
+3. **VEH 页面错误处理必要**：游戏访问未提交内存时，`AddVectoredExceptionHandler` 自动 `VirtualAlloc` 提交页面，游戏才能继续运行。
+
+### 当前链路
+
+```
+main() → Runtime() → set_app_context() → Setup(Vulkan) → Window::Create → SetPresenter
+→ LoadXexImage → LaunchModule → RunMainMessageLoop
+```
+
+### 工作目录
+
+- **测试项目**: `test_rexglue/` (独立 CMake 项目)
+- **构建目录**: `test_rexglue/out/easy/`（已验证配置，不要改 CMakeLists.txt）
+- **DLL 来源**: `refs/rexglue-sdk/out/win-amd64/rexruntimerd.dll` (self-built Vulkan-only)
+- **预编译 SDK 头文件**: `tools/rexglue-sdk-0.8.1.32-dev.gf22cd9d-win-amd64/include/`
+- **预编译 SDK 库**: `tools/rexglue-sdk-0.8.1.32-dev.gf22cd9d-win-amd64/lib/`
+
+### 构建命令
+
+```bash
+export VSROOT="/c/Program Files/Microsoft Visual Studio/18/Community"
+export LLVM="$VSROOT/VC/Tools/Llvm/x64/bin"
+export NINJA_DIR="$VSROOT/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja"
+export SDK_BIN="/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64"
+export CMAKE_DIR="$VSROOT/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin"
+export PATH="$LLVM:$SDK_BIN:$NINJA_DIR:$CMAKE_DIR:$PATH"
+cd test_rexglue/out/easy && cmake --build . -j 1
+```
+
+### 下一步
+
+1. **诊断黑屏** — 游戏是否调用 VdSwap？GPU 命令缓冲是否有内容？
+2. **参考 TDURE 完整工作项目** — 对比渲染管线差异
+3. **添加 VdSwap 追踪** — 确认游戏渲染循环是否活跃

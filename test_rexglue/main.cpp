@@ -1,162 +1,157 @@
-// GTA V — WIN32 app with file-based logging
+// GTA V — rexglue Vulkan baseline + window
 #include "generated/default/gta5_recomp_init.h"
-#include <rex/hook.h>
-
-// Hook VdSwap to check if the game's render loop is running
-// Must use printf (not g_log) because these run at global scope before main()
-#define VDSWAP_LOG(fmt, ...) do { \
-    FILE* f = fopen("gta5_rexglue.log", "a"); \
-    if(f) { fprintf(f, fmt "\n", ##__VA_ARGS__); fclose(f); } \
-} while(0)
-// No GPU hooks — let rexglue kernel handle all GPU functions internally
-// The kernel has MMIO interception, PM4 command processing, and Vulkan/D3D12 backends
-// Hooking VdSwap/VdGetSystemCommandBuffer prevents rexglue from working properly
 #include <rex/runtime.h>
 #include <rex/graphics/vulkan/graphics_system.h>
+#include <rex/graphics/graphics_system.h>
+#include <rex/ui/window.h>
 #include <rex/ui/windowed_app_context_win.h>
-#include <rex/system/xthread.h>
+#include <rex/hook.h>
+#include <rex/logging.h>
 #include <cstdio>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <atomic>
+#include <thread>
+#include <chrono>
 
-std::ofstream g_log;
+// === DIAGNOSTIC: render-loop detection ===
+// sub_822D41E8 is the GTA V render function that calls VdSwap. If this is
+// called the game reached its render loop; if never, it is stuck in init
+// (busy-wait). The hook writes proof to a flushed file directly from the
+// guest thread (a detached std::thread proved unreliable here).
+REX_EXTERN(__imp__sub_822D41E8);
+static std::atomic<uint64_t> g_swapCount{0};
+REX_HOOK_RAW(sub_822D41E8) {
+    uint64_t n = g_swapCount.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (n == 1 || n % 60 == 0) {
+        FILE* f = fopen("gta5_swap.txt", "a");
+        if (f) {
+            fprintf(f, "sub_822D41E8 (render/VdSwap) called: count=%llu\n",
+                (unsigned long long)n);
+            fclose(f);
+        }
+    }
+    __imp__sub_822D41E8(ctx, base);
+}
+
+// === DIAGNOSTIC: entry-point probe ===
+// xstart is the XEX entry (0x83639888). Proves the hook-override mechanism
+// works and shows whether the entry runs and ever returns.
+REX_EXTERN(__imp__xstart);
+REX_HOOK_RAW(xstart) {
+    FILE* f = fopen("gta5_xstart.txt", "a");
+    if (f) { fprintf(f, "xstart ENTERED\n"); fclose(f); }
+    __imp__xstart(ctx, base);
+    f = fopen("gta5_xstart.txt", "a");
+    if (f) { fprintf(f, "xstart RETURNED\n"); fclose(f); }
+}
 
 #ifdef _WIN32
 #include <windows.h>
-static LONG WINAPI PageFaultHandler(EXCEPTION_POINTERS* info) {
-    if (info->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
-        uintptr_t addr = info->ExceptionRecord->ExceptionInformation[1];
-        if (VirtualAlloc((LPVOID)(addr & ~0xFFFULL), 0x1000, MEM_COMMIT, PAGE_READWRITE)) {
-            static int n = 0;
-            if (++n <= 20) g_log << "[MEM] committed " << (void*)(addr & ~0xFFFULL) << std::endl;
+#include <cstdio>
+static LONG WINAPI PageFaultHandler(EXCEPTION_POINTERS* i) {
+    if (i->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+        uintptr_t a = i->ExceptionRecord->ExceptionInformation[1];
+        if (a > 0x10000) { // Don't commit near-NULL pages
+            VirtualAlloc((LPVOID)(a & ~0xFFFULL), 0x1000, MEM_COMMIT, PAGE_READWRITE);
             return EXCEPTION_CONTINUE_EXECUTION;
         }
-        g_log << "[FATAL] ACCESS_VIOLATION at 0x" << std::hex << addr << std::endl;
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
+static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* i) {
+    uintptr_t code = i->ExceptionRecord->ExceptionCode;
+    uintptr_t addr = i->ExceptionRecord->ExceptionAddress ? (uintptr_t)i->ExceptionRecord->ExceptionAddress : 0;
+    uintptr_t mem = (code == 0xC0000005) ? i->ExceptionRecord->ExceptionInformation[1] : 0;
+    fprintf(stderr, "\n!!! CRASH: code=0x%lX addr=0x%lX mem=0x%lX\n",
+        (unsigned long)code, (unsigned long)addr, (unsigned long)mem);
+    FILE* f = fopen("gta5_rexglue_crash.txt", "w");
+    if (f) { fprintf(f, "code=0x%lX addr=0x%lX mem=0x%lX\n",
+        (unsigned long)code, (unsigned long)addr, (unsigned long)mem); fclose(f); }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
 #endif
 
-int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nShow) {
-    g_log.open("gta5_rexglue.log");
-    g_log << "=== GTA V rexglue WIN32 ===" << std::endl;
+int main() {
+    std::ofstream log("gta5_rexglue.log");
+    fprintf(stderr, "=== GTA V rexglue Vulkan ===\n");
+
+    // Enable rexglue's own kernel/GPU logging to a file (debug level, flush
+    // every message) so we can see which kernel functions the game calls
+    // during init and where it stops.
+    rex::LogConfig logcfg;
+    logcfg.default_level = spdlog::level::debug;
+    logcfg.log_to_console = false;
+    logcfg.log_file = "gta5_kernel.log";
+    logcfg.flush_level = spdlog::level::trace;
+    rex::InitLogging(logcfg);
 
 #ifdef _WIN32
     AddVectoredExceptionHandler(1, PageFaultHandler);
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    SetUnhandledExceptionFilter(CrashHandler);
 #endif
 
+    // 1. Create Runtime
     std::filesystem::path gameRoot = "D:/Games/Xenia/gta5";
     std::filesystem::path userRoot = "C:/Users/Jellybone/AppData/Roaming/SanRecomp/save";
     rex::Runtime runtime(gameRoot, userRoot);
+    fprintf(stderr, "[1/5] Runtime created\n");
 
-    // Explicitly use Vulkan backend
-    // Set up window context so presenter has a window to render to
-    rex::ui::Win32WindowedAppContext appCtx(hInst, nShow);
-    appCtx.Initialize();
-    runtime.set_app_context(&appCtx);
+    // 2. Create Win32 app context BEFORE Setup (so SetupPresentation works)
+    HINSTANCE hInstance = GetModuleHandle(nullptr);
+    rex::ui::Win32WindowedAppContext app_context(hInstance, SW_SHOWNORMAL);
+    if (!app_context.Initialize()) {
+        log << "AppContext failed" << std::endl;
+        fprintf(stderr, "FAIL: AppContext init\n");
+        return 1;
+    }
+    runtime.set_app_context(&app_context);
+    fprintf(stderr, "[2/5] AppContext OK\n");
 
-    // Inject Vulkan backend — default would try D3D12 which isn't compiled in
+    // 3. Setup WITH app_context set (enables full presentation path)
     rex::RuntimeConfig cfg;
     cfg.graphics = REX_GRAPHICS_BACKEND(rex::graphics::vulkan::VulkanGraphicsSystem);
     auto status = runtime.Setup(PPCImageConfig, std::move(cfg));
-    // Check if graphics system is active after setup
-    if (runtime.graphics_system()) {
-        g_log << "Graphics system: PRESENT" << std::endl;
-    } else {
-        g_log << "Graphics system: NULL (no GPU backend)" << std::endl;
+    if (status != 0) {
+        log << "Setup failed: 0x" << std::hex << status << std::endl;
+        fprintf(stderr, "FAIL: Setup returned 0x%X\n", (unsigned)status);
+        return 1;
     }
-    if (runtime.is_tool_mode()) {
-        g_log << "WARNING: running in tool_mode (no GPU rendering!)" << std::endl;
-    }
-    if (status != 0) { g_log << "Setup failed: 0x" << std::hex << status << std::endl; return 1; }
+    log << "Setup OK" << std::endl;
+    auto* gs = static_cast<rex::graphics::GraphicsSystem*>(runtime.graphics_system());
+    fprintf(stderr, "[3/5] Setup OK, graphics=%s, presenter=%s\n",
+        gs ? "YES" : "NO",
+        (gs && gs->presenter()) ? "YES" : "NO");
 
+    // 4. Create window and connect presenter
+    auto window = rex::ui::Window::Create(app_context, "GTA V (rexglue Vulkan)", 1280, 720);
+    if (!window) {
+        log << "Window failed" << std::endl;
+        fprintf(stderr, "FAIL: Window creation\n");
+        return 1;
+    }
+    window->Open();
+    if (gs && gs->presenter()) {
+        window->SetPresenter(gs->presenter());
+    }
+    fprintf(stderr, "[4/5] Window opened\n");
+
+    // 5. Load XEX and launch game
     status = runtime.LoadXexImage("game:\\default.xex");
-    if (status != 0) { g_log << "XEX failed: 0x" << std::hex << status << std::endl; return 1; }
-
+    if (status != 0) {
+        log << "XEX failed" << std::endl;
+        fprintf(stderr, "FAIL: XEX load\n");
+        return 1;
+    }
     auto thread = runtime.LaunchModule();
-    g_log << "Launched OK" << std::endl;
+    log << "Launched" << std::endl;
+    log.flush();
+    fprintf(stderr, "[5/5] XEX loaded + Launched\nEntering message loop...\n");
 
-    uint8_t* membase = runtime.virtual_membase();
+    // 7. Windows message loop
+    int result = app_context.RunMainMessageLoop();
 
-    // Start VBlank timer — game needs periodic VBlank interrupts to begin rendering
-    std::atomic<bool> vblankStop{false};
-    std::thread vblankThread([&]() {
-        uint32_t tick = 0;
-        VDSWAP_LOG("[VBlank] thread starting");
-        while (!vblankStop.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(16));
-            tick++;
-            if (tick <= 3 || tick % 60 == 0) {
-                VDSWAP_LOG("[VBlank] alive tick %d", tick);
-            }
-            // Don't call VdSwap directly — it crashes. Game's render callback
-            // should be triggered by rexglue's internal VBlank interrupt.
-        }
-    });
-    g_log << "VBlank timer started" << std::endl;
-    g_log.flush();
-
-    // Commit all likely rendering targets
-    uint32_t scanAddrs[] = {0xE0000000, 0xE0100000, 0xE0500000, 0xE0800000,
-                            0x83000000, 0x84000000, 0x85000000, 0x90000000};
-    for (uint32_t off : scanAddrs) {
-        VirtualAlloc(membase + off, 0x500000, MEM_COMMIT, PAGE_READWRITE);
-    }
-    g_log << "Memory regions committed" << std::endl;
-
-    // GPU MMIO scan: detect what registers the game writes
-    uint8_t* gpuMmio = membase + 0x7FC80000;
-    uint32_t gpuSize = 0x80000; // 512KB
-    VirtualAlloc(gpuMmio, gpuSize, MEM_COMMIT, PAGE_READWRITE);
-    std::vector<uint32_t> prevState(gpuSize / 4, 0);
-    for (int tick = 0; tick < 20; tick++) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        bool changed = false;
-        uint32_t* cur = (uint32_t*)gpuMmio;
-        for (uint32_t i = 0; i < gpuSize / 4; i++) {
-            uint32_t val = cur[i]; // raw (big-endian in memory)
-            if (val != prevState[i]) {
-                if (!changed) {
-                    g_log << "[GPU-MMIO] Tick " << tick << " changes:" << std::endl;
-                    changed = true;
-                }
-                g_log << "  reg=0x" << std::hex << i << " prev=0x" << prevState[i]
-                      << " cur=0x" << val << std::dec << std::endl;
-                prevState[i] = val;
-            }
-        }
-        if (changed) g_log.flush();
-    }
-    g_log << "GPU MMIO scan complete" << std::endl;
-    g_log.flush();
-
-    // Scan all memory regions for non-zero pixels (game render output)
-    for (int tick = 0; tick < 30; tick++) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        bool found = false;
-        for (uint32_t off : scanAddrs) {
-            uint8_t* p = membase + off;
-            int nz = 0;
-            for (int i = 0; i < 1280*720 && i*4 < 0x500000; i++)
-                if (p[i*4] || p[i*4+1] || p[i*4+2] || p[i*4+3]) nz++;
-            if (nz > 0) {
-                g_log << "[RENDER] Tick" << tick << " addr=0x" << std::hex << off
-                      << " pixels=" << std::dec << nz << std::endl;
-                found = true; break;
-            }
-        }
-        if (found) { g_log.flush(); break; }
-    }
-    g_log << "Render scan complete" << std::endl;
-    g_log.flush();
-
-    // Run Windows message loop — required for rexglue window to appear
-    g_log << "Running message loop..." << std::endl;
-    g_log.flush();
-    vblankStop.store(true); vblankThread.join();
-    int result = appCtx.RunMainMessageLoop();
-    g_log << "Exit: " << result << std::endl;
-    CoUninitialize();
+    fprintf(stderr, "Done, result=%d\n", result);
     return result;
 }

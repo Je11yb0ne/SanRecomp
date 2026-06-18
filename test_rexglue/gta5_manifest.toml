@@ -8,3 +8,16 @@ game_root = "D:/Games/Xenia/gta5"
 file_path = "D:/Games/Xenia/gta5/default.xex"
 out_directory_path = "generated/default"
 includes = []
+
+# Function entries the recompiler's auto-discovery missed. These are tail-call /
+# indirect-branch targets that sit after a bctr/blr terminator, so the analyzer
+# treated them as unreachable and emitted REX_FATAL("Unresolved call ...").
+# Scoped under [entrypoint] (this manifest uses the nested multi-module schema).
+[entrypoint.functions]
+0x8255DC48 = { end = "0x8255DC58" }
+0x8255DC88 = { end = "0x8255DCB8" }
+0x8256BCC8 = { end = "0x8256BCE0" }
+0x83366BD0 = { end = "0x83366BEC" }
+# Runtime-discovered missing functions (indirect-call targets codegen can't see
+# statically). Added as the game reveals them during init.
+0x836E9A58 = { end = "0x836E9A80" }

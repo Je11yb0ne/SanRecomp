@@ -4,7 +4,7 @@
 
 **Rule:** Never stop. Update after each phase. Just work.
 
-**Current Phase: 9 — GPU 命令翻译 → 真实游戏画面** ⚡ NEXT
+**Current Phase: 10 — rexglue Vulkan 渲染诊断** ⚡ NEXT
 
 ---
 
@@ -70,6 +70,48 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 ---
 
 ## Phase Progress Log
+
+### 2026-06-18 (Phase 10 — rexglue Vulkan 渲染诊断)
+
+**🟢 重大突破：rexglue Vulkan 窗口 + Presenter 工作！**
+
+- ✅ **Vulkan Presenter 创建成功** (presenter=YES)
+  - 关键：`runtime.set_app_context(&app_context)` 必须在 `runtime.Setup()` 之前调用
+  - 这样 Runtime 内部的 `SetupPresentation` 才会被调用
+- ✅ **Win32 窗口弹出** — `Window::Create + Open + SetPresenter`
+- ✅ **Setup OK, XEX loaded, Launched** — 游戏完整启动链打通
+- ✅ **VEH 页面错误处理** — `AddVectoredExceptionHandler` 自动提交内存页面
+- ⚠️ **窗口黑屏** — 游戏运行但画面全黑
+- 🚫 **教训：禁止 VirtualAlloc GPU MMIO (0x7FC80000)** — 会与 GPU 驱动冲突导致蓝屏
+
+**🔴 黑屏根因已确诊（2026-06-18 晚）：FATAL Unresolved call，不是忙等也不是 GPU 翻译问题**
+
+诊断方法（systematic-debugging）：
+- 用 `REX_HOOK_RAW` 覆盖弱别名函数加追踪（hook 机制经 xstart 验证有效）
+- 启用 rexglue 自带日志（`rex::InitLogging(debug, flush=trace)` → `gta5_kernel.log`）
+
+诊断证据：
+- `xstart ENTERED` 但**无 `xstart RETURNED`** → 游戏入口执行了但卡在 xstart 内部
+- 渲染函数 `sub_822D41E8` **从未被调用** → 从未到达渲染循环（排除"GPU 命令未翻译"假设）
+- 内核日志末行：`[critical] [FATAL] Unresolved call from 0x8255DC5C to 0x8255DC48`
+
+根因：
+- `sub_8255DC58` = thunk：`li r4,4; b 0x8255DC48`（尾调用跳到 0x8255DC48）
+- 0x8255DC48 在 `sub_8255DC20`（C++ vtable 分发器）的 `bctr` **之后**，重编译器把 bctr 当终止符，**没生成 0x8255DC48 的代码** → 函数边界识别遗漏
+- guest 主线程撞上 `REX_FATAL` → 线程死 → init 中断 → 黑屏（窗口存活因主线程在消息循环 + GPU/VSync 线程在跑）
+
+问题规模：**仅 8 个 FATAL，4 个唯一未解析目标**：`0x8255DC48` `0x8255DC88` `0x8256BCC8` `0x83366BD0`
+
+修复路径（已确认）：在 `gta5_manifest.toml` 加 `[functions]` 声明这 4 个地址为函数入口 → 重新 `rexglue codegen` → 重新构建：
+```toml
+[functions]
+0x8255DC48 = {}
+0x8255DC88 = {}
+0x8256BCC8 = {}
+0x83366BD0 = {}
+```
+
+**构建系统教训：`.ninja_deps` 被中途杀构建/截断管道损坏 → 每次全量重编 197 文件。修复：删 `.ninja_deps`+`.ninja_log` 后做一次完整不中断构建；之后增量构建正常。绝不中途杀 ninja。**
 
 ### 2026-06-17 (Phase 9 — GPU 命令翻译 WIP)
 - ✅ SPIR-V 着色器编译：DXC 将 22 个 HLSL → SPIR-V .h 文件
