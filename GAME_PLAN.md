@@ -155,6 +155,26 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 
 **下一阶段策略选项**：(a) 追 tid=11/12 在 GPU 代码里等的调度对象，连接到 GPU 中断该 signal 的路径；(b) 对比 UnleashedRecomp（refs/，完整工作的全游戏 recomp）的线程/GPU 同步实现；(c) 追 tid=6/7 循环里检查的条件
 
+**🔵 UnleashedRecomp 对比 + GPU 线程分析（2026-06-19）**
+
+UnleashedRecomp（Sonic Unleashed，完整工作的全游戏 recomp）的**根本架构差异**：
+- **把所有 GPU 硬件函数 stub 成空操作**：VdSwap、VdInitializeRingBuffer、VdSetGraphicsInterruptCallback、VdInitializeEngines、**VdCallGraphicsNotificationRoutines**（图形通知派发）全是 `!!! STUB !!!`
+- **不模拟 Xbox360 GPU 硬件**（无环形缓冲、无 VBlank 中断派发）
+- 用 **272 个 `GUEST_FUNCTION_HOOK`** 在引擎层 hook 游戏函数，把渲染/present 替换成原生实现驱动帧循环
+- 内核 sync（NtWaitForSingleObjectEx/KeWaitForSingleObject）是标准 host 原语实现（和 rexglue 一样）
+
+| | UnleashedRecomp | rexglue（我们）|
+|---|---|---|
+| GPU 层 | 全 stub | Xenia 式硬件模拟 |
+| 渲染驱动 | hook 272 引擎函数原生渲染 | 游戏自跑低层 GPU+线程 |
+| 死锁风险 | 规避（引擎接管）| 高（需完整硬件模拟）|
+
+**结论**：UnleashedRecomp 靠引擎 hook **完全绕过** GPU 硬件层和这类线程死锁。rexglue 用硬件模拟，要求游戏低层 init 完全自洽——GTA V 的生产者-消费者 bootstrap 在我们环境没启动（29 WAIT 0 RELEASE）。
+
+GPU 渲染线程 `sub_836BEEA0`：`LEAVE_GLOBAL_LOCK → KeWaitForSingleObject(调度对象 0x4004FB4C, 超时) → ENTER_GLOBAL_LOCK`，等派发对象上的工作（同消费者模式）。
+
+**战略岔路**：(a) 继续 RE GTA V 低层 init，找缺失的"第一推动"（深、不确定）；(b) 转向引擎 hook 路线（UnleashedRecomp 式，需大量 GTA V 引擎逆向）。下一具体实验：追 tid=6/7 循环（有执行时间）里 gating 生产的条件。
+
 ### 2026-06-17 (Phase 9 — GPU 命令翻译 WIP)
 - ✅ SPIR-V 着色器编译：DXC 将 22 个 HLSL → SPIR-V .h 文件
 - ✅ video.cpp SPIR-V 包含解除 + CREATE_SHADER 宏修复 Windows+Vulkan
