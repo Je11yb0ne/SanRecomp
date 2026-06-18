@@ -98,6 +98,28 @@ REX_HOOK_RAW(sub_836B1768) {
     __imp__sub_836B1768(ctx, base);
 }
 
+// === DIAGNOSTIC: semaphore wait/release tracing ===
+// sub_823C7A68 = game wait wrapper (r3=handle), sub_8239CBA8 = game release
+// wrapper (r3=handle). Logging both shows whether semaphore 0xF80008F0 (the
+// main thread's wait) is ever released, and the full wait/release pattern.
+static void diag_sync_log(const char* op, uint32_t handle) {
+    uint32_t tid = 0;
+    auto* t = rex::system::XThread::GetCurrentThread();
+    if (t) tid = t->thread_id();
+    FILE* f = fopen("gta5_sync.txt", "a");
+    if (f) { fprintf(f, "[tid=%X] %s 0x%08X\n", tid, op, handle); fclose(f); }
+}
+REX_EXTERN(__imp__sub_823C7A68);
+REX_HOOK_RAW(sub_823C7A68) {
+    diag_sync_log("WAIT   ", ctx.r3.u32);
+    __imp__sub_823C7A68(ctx, base);
+}
+REX_EXTERN(__imp__sub_8239CBA8);
+REX_HOOK_RAW(sub_8239CBA8) {
+    diag_sync_log("RELEASE", ctx.r3.u32);
+    __imp__sub_8239CBA8(ctx, base);
+}
+
 #ifdef _WIN32
 #include <windows.h>
 #include <cstdio>
@@ -136,6 +158,8 @@ int main() {
     logcfg.log_to_console = false;
     logcfg.log_file = "gta5_kernel.log";
     logcfg.flush_level = spdlog::level::trace;
+    // Trace kernel category to capture semaphore/event/wait ops (Nt*/Ke*).
+    logcfg.category_levels["krnl"] = spdlog::level::trace;
     rex::InitLogging(logcfg);
 
 #ifdef _WIN32

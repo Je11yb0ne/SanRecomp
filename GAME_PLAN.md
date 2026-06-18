@@ -142,6 +142,19 @@ VBlank → sub_822D41E8 → GPU 命令 → Vulkan 绘制 → 纹理/几何体 �
 
 **下一阶段**：解开这个多线程死锁 — 追踪信号量释放路径（谁该 release 0xF80008F0），对比可用 rexglue 项目（TDURE）的线程行为，或检查 gameconfig.xml 加载路径。诊断工具已在 main.cpp（看门狗 + objdump）。
 
+**🔴 死锁深挖（2026-06-18 深夜3）：游戏 29 次 WAIT，0 次 RELEASE**
+
+- ✅ gameconfig.xml 已提供（从 `gta5 extract/common.rpf/data/` 合并进 `gta5/common/data/`，VFS 不再 miss）——**但死锁依旧**，证明 gameconfig 不是根因（红鲱鱼；不过提取的资产过了死锁后仍需要）
+- ✅ rexglue `NtWaitForSingleObjectEx` 实现正确（LookupObject→object->Wait，非 stub），wait 机制无 bug
+- ✅ 排除全局锁死锁（线程分散在不同 wait 函数，全局锁在等待时正常释放）
+- ✅ **hook 游戏 wait 包装 sub_823C7A68 + 释放包装 sub_8239CBA8 追踪信号量操作**
+- 🔴 **关键发现：16s 内 29 次 WAIT，0 次 RELEASE** — 游戏从不释放任何信号量
+  - 主线程 tid=4 等 0xF80008F0（一次，永久阻塞）
+  - tid=6/7 **循环重试**等 0xF8000068（带超时，超时→重等，有执行时间但条件永不满足）
+- **根因结论**：生产者/释放侧从未运行 → 所有消费者线程阻塞。最可能是 GPU/渲染线程（tid=11/12，阻塞在 KeWaitForSingleObject 等调度对象 0x4004FB4C/0x4004FBB8，在 GPU 代码 0x836BExxx）是该释放信号量的生产者，但它在等某个永不就绪的 GPU 状态/事件；GPU 中断处理器 836B1768 只做自旋锁，不 signal 它
+
+**下一阶段策略选项**：(a) 追 tid=11/12 在 GPU 代码里等的调度对象，连接到 GPU 中断该 signal 的路径；(b) 对比 UnleashedRecomp（refs/，完整工作的全游戏 recomp）的线程/GPU 同步实现；(c) 追 tid=6/7 循环里检查的条件
+
 ### 2026-06-17 (Phase 9 — GPU 命令翻译 WIP)
 - ✅ SPIR-V 着色器编译：DXC 将 22 个 HLSL → SPIR-V .h 文件
 - ✅ video.cpp SPIR-V 包含解除 + CREATE_SHADER 宏修复 Windows+Vulkan
