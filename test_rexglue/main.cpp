@@ -11,6 +11,9 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/xobject.h>
 #include <rex/system/util/object_table.h>
+#include <rex/kernel/init.h>
+#include <rex/audio/sdl/sdl_audio_system.h>
+#include <rex/input/input_system.h>
 #include <cstdio>
 #include <cstdint>
 #include <filesystem>
@@ -184,9 +187,16 @@ int main() {
     runtime.set_app_context(&app_context);
     fprintf(stderr, "[2/5] AppContext OK\n");
 
-    // 3. Setup WITH app_context set (enables full presentation path)
+    // 3. Setup WITH app_context set (enables full presentation path).
+    // CRITICAL: provide audio/input/kernel_init like ReXApp does — without
+    // these the game's audio/input/kernel-dependent threads deadlock waiting
+    // for subsystems that were never initialized. (skate3recomp relies on
+    // these ReXApp defaults; our manual setup was missing them.)
     rex::RuntimeConfig cfg;
     cfg.graphics = REX_GRAPHICS_BACKEND(rex::graphics::vulkan::VulkanGraphicsSystem);
+    cfg.audio_factory = REX_AUDIO_BACKEND(rex::audio::sdl::SDLAudioSystem);
+    cfg.input_factory = REX_INPUT_BACKEND(rex::input::CreateDefaultInputSystem);
+    cfg.kernel_init = rex::kernel::InitializeKernel;
     auto status = runtime.Setup(PPCImageConfig, std::move(cfg));
     if (status != 0) {
         log << "Setup failed: 0x" << std::hex << status << std::endl;

@@ -175,6 +175,24 @@ GPU 渲染线程 `sub_836BEEA0`：`LEAVE_GLOBAL_LOCK → KeWaitForSingleObject(�
 
 **战略岔路**：(a) 继续 RE GTA V 低层 init，找缺失的"第一推动"（深、不确定）；(b) 转向引擎 hook 路线（UnleashedRecomp 式，需大量 GTA V 引擎逆向）。下一具体实验：追 tid=6/7 循环（有执行时间）里 gating 生产的条件。
 
+**🟢🟢 死锁打破！（2026-06-19）—— rexglue 参考项目揭示根因**
+
+下载 4 个 rexglue 全游戏项目到 refs/（skate3recomp / TheOutFit / bo2-recompiled / TDURE）。关键发现：
+- **skate3recomp（完整游戏）用标准 `REX_DEFINE_APP` + `ReXApp`，src/ 无任何 GPU/线程 hook** → 死锁不是 rexglue 限制，是我们设置不全
+- **根因：我们手动 `Runtime::Setup` 只设了 `cfg.graphics`，漏了 ReXApp 默认设置的三项**：
+  - `cfg.audio_factory = REX_AUDIO_BACKEND(rex::audio::sdl::SDLAudioSystem)`
+  - `cfg.input_factory = REX_INPUT_BACKEND(rex::input::CreateDefaultInputSystem)`
+  - `cfg.kernel_init = rex::kernel::InitializeKernel`
+- 游戏的生产者线程在等这些子系统初始化，没初始化 → 全线程死锁
+
+**修复后（main.cpp 加这三项 config，符号都在预编译 lib 里）：**
+- ✅ 死锁打破——游戏冲过 SetInterruptCallback，继续唤醒线程、创建监听器
+- ✅ **出现信号量 RELEASE**（之前恒为 0）
+- ✅ **XamInputGetState 被调用**（游戏到达输入轮询循环！）
+- ⚠️ 新崩溃：`0xC0000005 mem=0x8`（空指针 +8 解引用，发生在输入轮询之后）— 这是新阶段，比死锁前进一大步
+
+**下一步**：诊断输入轮询后的空指针崩溃（mem=0x8）。VEH 不提交 <0x10000 的地址（真空指针，非未提交页）。需 guest 侧 instrument 定位崩溃的游戏函数。
+
 ### 2026-06-17 (Phase 9 — GPU 命令翻译 WIP)
 - ✅ SPIR-V 着色器编译：DXC 将 22 个 HLSL → SPIR-V .h 文件
 - ✅ video.cpp SPIR-V 包含解除 + CREATE_SHADER 宏修复 Windows+Vulkan
