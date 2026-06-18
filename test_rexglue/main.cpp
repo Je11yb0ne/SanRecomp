@@ -73,7 +73,9 @@ REX_HOOK_RAW(sub_822D41E8) {
 // xstart is the XEX entry (0x83639888). Proves the hook-override mechanism
 // works and shows whether the entry runs and ever returns.
 REX_EXTERN(__imp__xstart);
+static std::atomic<uint8_t*> g_guest_base{nullptr};  // captured for VEH dumps
 REX_HOOK_RAW(xstart) {
+    g_guest_base.store(base, std::memory_order_relaxed);
     FILE* f = fopen("gta5_xstart.txt", "a");
     if (f) { fprintf(f, "xstart ENTERED\n"); fclose(f); }
     __imp__xstart(ctx, base);
@@ -88,6 +90,7 @@ REX_HOOK_RAW(xstart) {
 REX_EXTERN(__imp__sub_836B1768);
 static std::atomic<uint64_t> g_irqCount{0};
 REX_HOOK_RAW(sub_836B1768) {
+    g_guest_base.store(base, std::memory_order_relaxed);
     uint64_t n = g_irqCount.fetch_add(1, std::memory_order_relaxed) + 1;
     if (n == 1 || n % 60 == 0) {
         FILE* f = fopen("gta5_irq.txt", "a");
@@ -123,6 +126,37 @@ REX_HOOK_RAW(sub_8239CBA8) {
     __imp__sub_8239CBA8(ctx, base);
 }
 
+// === DIAGNOSTIC: XamContentCreateEx content_data probe ===
+// sub_8363A3B8 is the guest XamContentCreateEx wrapper; it throws
+// utf8::invalid_utf8 in the kernel when content_data.file_name_raw holds
+// invalid UTF-8. It is called INDIRECTLY (weak-alias hook misses it), so we
+// install via FunctionDispatcher::SetFunction in main(). content_data layout:
+// content_type@4, file_name_raw@0x108 (42 bytes).
+static PPCFunc* g_orig_content_open = nullptr;
+static void ProbeContentOpen(PPCContext& ctx, uint8_t* base) {
+    FILE* f = fopen("gta5_content_open.txt", "a");
+    if (f) {
+        uint32_t cd = ctx.r5.u32, rn = ctx.r4.u32, flags = ctx.r6.u32;
+        uint32_t devid = 0, ctype = 0;
+        char fname[48] = {0}, root[16] = {0};
+        if (cd) {
+            const uint8_t* p = base + cd;
+            devid = (p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3];
+            ctype = (p[4]<<24)|(p[5]<<16)|(p[6]<<8)|p[7];
+            for (int k = 0; k < 42; ++k) fname[k] = (char)p[0x108 + k];
+        }
+        if (rn) { for (int k = 0; k < 15; ++k) { char c = (char)base[rn + k]; root[k]=c; if(!c) break; } }
+        fprintf(f, "XamContentCreateEx user=0x%X root='%s' cd=0x%08X flags=0x%X devid=0x%X ctype=0x%X fn_hex=",
+            ctx.r3.u32, root, cd, flags, devid, ctype);
+        for (int k = 0; k < 42; ++k) fprintf(f, "%02X", (unsigned char)fname[k]);
+        fprintf(f, " fn_ascii='");
+        for (int k = 0; k < 42 && fname[k]; ++k) fprintf(f, "%c", (fname[k]>=32&&fname[k]<127)?fname[k]:'.');
+        fprintf(f, "'\n");
+        fclose(f);
+    }
+    if (g_orig_content_open) g_orig_content_open(ctx, base);
+}
+
 #ifdef _WIN32
 #include <windows.h>
 #include <cstdio>
@@ -132,6 +166,54 @@ static LONG WINAPI PageFaultHandler(EXCEPTION_POINTERS* i) {
         if (a > 0x10000) { // Don't commit near-NULL pages
             VirtualAlloc((LPVOID)(a & ~0xFFFULL), 0x1000, MEM_COMMIT, PAGE_READWRITE);
             return EXCEPTION_CONTINUE_EXECUTION;
+        }
+    }
+    // First-chance capture of the C++ throw (0xE06D7363) — the stack is intact
+    // here, so the guest thread's lr/ctr/last_indirect_target are FRESH (the
+    // unhandled filter sees stale values), and a host backtrace pinpoints the
+    // throwing DLL function. Log once, then let it propagate.
+    if (i->ExceptionRecord->ExceptionCode == 0xE06D7363) {
+        static std::atomic<bool> once{false};
+        bool exp = false;
+        if (once.compare_exchange_strong(exp, true)) {
+            FILE* f = fopen("gta5_throw_trace.txt", "w");
+            if (f) {
+                auto* t = rex::system::XThread::GetCurrentThread();
+                if (t && t->thread_state() && t->thread_state()->context()) {
+                    auto* c = t->thread_state()->context();
+                    fprintf(f, "guest tid=%X lr=0x%08llX ctr=0x%08X indir=0x%08X r3=0x%08X r4=0x%08X r5=0x%08X r6=0x%08X r11=0x%08X\n",
+                        t->thread_id(), (unsigned long long)c->lr, c->ctr.u32,
+                        c->last_indirect_target, c->r3.u32, c->r4.u32, c->r5.u32, c->r6.u32, c->r11.u32);
+                    // r5 = content_data guest ptr; dump content_type@4 + file_name_raw@0x108 (42).
+                    uint8_t* gb = g_guest_base.load(std::memory_order_relaxed);
+                    if (gb && c->r5.u32) {
+                        const uint8_t* p = gb + c->r5.u32;
+                        uint32_t ctype = (p[4]<<24)|(p[5]<<16)|(p[6]<<8)|p[7];
+                        fprintf(f, "content_data: ctype=0x%X file_name_hex=", ctype);
+                        for (int k = 0; k < 42; ++k) fprintf(f, "%02X", p[0x108 + k]);
+                        fprintf(f, " ascii='");
+                        for (int k = 0; k < 42; ++k){ uint8_t b=p[0x108+k]; if(!b)break; fprintf(f, "%c", (b>=32&&b<127)?b:'.'); }
+                        fprintf(f, "'\n display_name_hex=");
+                        for (int k = 0; k < 32; ++k) fprintf(f, "%02X", p[8 + k]);
+                        fprintf(f, "\n");
+                    }
+                } else {
+                    fprintf(f, "(no guest thread context)\n");
+                }
+                HMODULE dll = GetModuleHandleA("rexruntimerd.dll");
+                HMODULE exe = GetModuleHandleA(nullptr);
+                fprintf(f, "rexruntimerd.dll base=%p  exe base=%p\n", (void*)dll, (void*)exe);
+                void* bt[32];
+                USHORT n = CaptureStackBackTrace(0, 32, bt, nullptr);
+                for (USHORT k = 0; k < n; ++k) {
+                    uintptr_t a = (uintptr_t)bt[k];
+                    const char* mod = "?"; uintptr_t off = a;
+                    if (dll && a >= (uintptr_t)dll) { mod = "dll"; off = a - (uintptr_t)dll; }
+                    else if (exe && a >= (uintptr_t)exe) { mod = "exe"; off = a - (uintptr_t)exe; }
+                    fprintf(f, "  [%2d] %s+0x%llX (abs=%p)\n", k, mod, (unsigned long long)off, bt[k]);
+                }
+                fclose(f);
+            }
         }
     }
     return EXCEPTION_CONTINUE_SEARCH;
@@ -147,13 +229,43 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* i) {
         auto* c = t->thread_state()->context();
         glr = c->lr; gr1 = c->r1.u32; gr3 = c->r3.u32; gtid = t->thread_id();
     }
-    fprintf(stderr, "\n!!! CRASH: code=0x%lX addr=0x%lX mem=0x%lX | guest tid=%X lr=0x%llX r1=0x%X r3=0x%X\n",
+    // Decode MSVC C++ exceptions (0xE06D7363) to get the thrown type name +
+    // (for std::exception subclasses) the what() message. This pinpoints which
+    // rexglue/std throw fired.
+    char cxxinfo[512] = {0};
+    if (code == 0xE06D7363 && i->ExceptionRecord->NumberParameters >= 3) {
+        auto* rec = i->ExceptionRecord;
+        uintptr_t base = (rec->NumberParameters >= 4) ? rec->ExceptionInformation[3] : 0;
+        const uint8_t* obj = (const uint8_t*)rec->ExceptionInformation[1];
+        const uint8_t* throwInfo = (const uint8_t*)rec->ExceptionInformation[2];
+        __try {
+            if (throwInfo && base) {
+                int32_t cta_rva = *(const int32_t*)(throwInfo + 12);   // pCatchableTypeArray
+                const uint8_t* cta = (const uint8_t*)(base + cta_rva);
+                int n = *(const int*)cta;
+                if (n > 0) {
+                    int32_t ct_rva = *(const int32_t*)(cta + 4);       // first CatchableType
+                    const uint8_t* ct = (const uint8_t*)(base + ct_rva);
+                    int32_t td_rva = *(const int32_t*)(ct + 4);        // pType -> TypeDescriptor
+                    const char* name = (const char*)(base + td_rva + 16); // TypeDescriptor.name
+                    // Try what(): MSVC std::exception stores char* _Data._What at +8
+                    const char* what = nullptr;
+                    if (obj) { const char* w = *(const char* const*)(obj + 8); if (w) what = w; }
+                    _snprintf_s(cxxinfo, sizeof(cxxinfo), _TRUNCATE,
+                        " | C++ throw type='%s' what='%s'", name ? name : "?", what ? what : "");
+                }
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            _snprintf_s(cxxinfo, sizeof(cxxinfo), _TRUNCATE, " | C++ throw (decode failed)");
+        }
+    }
+    fprintf(stderr, "\n!!! CRASH: code=0x%lX addr=0x%lX mem=0x%lX | guest tid=%X lr=0x%llX r1=0x%X r3=0x%X%s\n",
         (unsigned long)code, (unsigned long)addr, (unsigned long)mem,
-        gtid, (unsigned long long)glr, gr1, gr3);
+        gtid, (unsigned long long)glr, gr1, gr3, cxxinfo);
     FILE* f = fopen("gta5_rexglue_crash.txt", "w");
-    if (f) { fprintf(f, "code=0x%lX addr=0x%lX mem=0x%lX\nguest tid=%X lr=0x%llX r1=0x%X r3=0x%X\n",
+    if (f) { fprintf(f, "code=0x%lX addr=0x%lX mem=0x%lX\nguest tid=%X lr=0x%llX r1=0x%X r3=0x%X%s\n",
         (unsigned long)code, (unsigned long)addr, (unsigned long)mem,
-        gtid, (unsigned long long)glr, gr1, gr3); fclose(f); }
+        gtid, (unsigned long long)glr, gr1, gr3, cxxinfo); fclose(f); }
     return EXCEPTION_EXECUTE_HANDLER;
 }
 #endif
@@ -219,6 +331,13 @@ int main() {
         (gs && gs->presenter()) ? "YES" : "NO");
     fprintf(stderr, "[diag] input_system=%p audio_system=%p\n",
         (void*)runtime.input_system(), (void*)runtime.audio_system());
+
+    // Install indirect-call probe on guest XamContentCreateEx wrapper.
+    if (auto* fd = runtime.function_dispatcher()) {
+        g_orig_content_open = fd->GetFunction(0x8363A3B8);
+        fd->SetFunction(0x8363A3B8, &ProbeContentOpen);
+        fprintf(stderr, "[diag] content-open probe installed (orig=%p)\n", (void*)g_orig_content_open);
+    }
 
     // 4. Create window and connect presenter
     auto window = rex::ui::Window::Create(app_context, "GTA V (rexglue Vulkan)", 1280, 720);

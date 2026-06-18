@@ -4,7 +4,74 @@
 
 **Rule:** Never stop. Update after each phase. Just work.
 
-**Current Phase: 10 — rexglue Vulkan 渲染诊断** ⚡ NEXT
+**Current Phase: 11 — 安装 8GB STFS 数据让 game: 解析资源** ⚡ NEXT
+
+---
+
+## Phase 11 Goal (2026-06-19)
+
+**GTA V 渲染真实游戏画面 — 安装 8GB STFS 数据让 `game:` 解析游戏资源文件。**
+
+### 诊断闭环（本次会话）
+游戏已是**稳定交互状态**（60Hz present + 轮询 `XamInputGetState user=0..3`），停在安装/加载界面。
+它早已冲过"是否已安装"判断，正在**加载资源但全部 `entry not found`**：
+```
+game:\xbox360\textures\startup.#td        ← 找不到
+game:\common\data\startup.meta            ← 找不到
+game:\xbox360\anim\creaturemetadata.rpf   ← 找不到
+```
+`game:` = `D:\Games\Xenia\gta5`，只有顶层 `.rpf` 归档，没有 `xbox360\`/`common\` loose 树。
+
+**8GB 安装 = 4 个 PIRS STFS 包**（已定位 + 确认 magic=`PIRS`）：
+```
+D:\Games\Xenia\gta5\content\0000000000000000\545408A7\00000002\545408A70000000{0,1,2,3}
+（每个 ~2GB，共 ~8GB，里面是带正确文件名的 xbox360\/common\ 树）
+```
+**为何游戏认为没安装**：rexglue 枚举器 `XamContentCreateEnumerator→ListContent` 扫的是 userRoot(`AppData\...\save`)，
+且只枚举目录、跳过原始包文件 → 0 items → 安装提示。
+
+### 关键事实
+- rexglue 自带 STFS 提取：`StfsContainerDevice` + `ContentManager::InstallContent`（content_manager.cpp:572）
+- 预编译 SDK 暴露了 `rex/filesystem/devices/stfs_container_device.h` + `entry.h`/`file.h` → 可写独立解包器
+- OpenIV 解包（`D:\Games\Xenia\gta5 extract\`）**不可用**：文件名被改（`.#td`→`.xtd`、`.meta`→`.xml`）且不完整
+- 参考：skate3 `RunRexglueIsoInstallWizardBlocking` + `ExtractAll`（skate3_iso_installer.cpp）= 安装器 UI 模板
+
+### 步骤
+1. 写独立 STFS 解包器（rexglue `StfsContainerDevice`），解包 1 包验证文件名正确
+2. 解包全部 4 包 merge 进 `game:` 根（产出 `xbox360\`+`common\` 树）
+3. 重跑，查 fs 日志资源解析 + 游戏是否冲过加载界面
+4. 通过后按 skate3 模式包装成 in-app 安装器 UI（自动检测/选 STFS 源 → 解包 → 进游戏）
+
+### 待验证未知
+- 游戏读安装数据走 `game:` 还是 content-mount root？→ 先直接 merge 进 `game:` 根（请求路径就是 `game:\xbox360\...`，最可能正确），实验确认
+
+### Phase 11 进展（2026-06-19 会话）
+
+**✅ 已完成 + 重大发现：**
+1. **STFS 解包器** `test_rexglue/stfs_extract.cpp`（用 rexglue `StfsContainerDevice`）+ CMake target `stfs_extract`。已构建可用。
+2. **8GB 安装已解包**：4 个 PIRS 包 → 每个含 `partN.rpf`（RPF7 归档）。解包到 userRoot 内容布局：
+   `C:\Users\Jellybone\AppData\Roaming\SanRecomp\save\0000000000000000\545408A7\00000002\545408A70000000{0..3}\partN.rpf`
+3. **枚举成功**：`XamContentCreateEnumerator` 0 → 4 items（content_type 2 正确，路径匹配 rexglue `ListContent`）。
+4. **修复 rexglue utf8 崩溃 bug**：`rex::string::to_utf16`（src/core/string.cpp:34）用检查版 `utf8::utf8to16`，遇非法 UTF-8 抛 `utf8::invalid_utf8` → 崩溃。改为先 `replace_invalid` 再转换（非抛出，同 Xenia 容错）。**已改 + 重建 DLL**。
+   - 诊断手段：main.cpp CrashHandler 解码 MSVC C++ 异常类型名；VEH first-chance 捕获 + `CaptureStackBackTrace`；`llvm-symbolizer + rexruntimerd.pdb` 符号化定位到 `ResolvePackagePath→to_utf16`。
+
+**🔴 当前精确阻塞：游戏用未初始化 content_data 打开安装内容 → 脏盘错误**
+- 修 utf8 后不再崩溃，但游戏报 **`XamShowDirtyDiscErrorUI`**（脏盘/读取错误）。
+- 给 rexglue `xeXamContentCreate` 加诊断日志，确认游戏行为：
+  - 游戏调 `XamContentCreateEx`（客户机 `sub_8363A408` @ recomp.182.cpp:37222），打开 **5 个 root：part0/part1/part2/part3/common**，flags=3（OPEN_EXISTING）。
+  - **content_data 完全是未初始化垃圾**：device_id/content_type/display_name/file_name 全是宿主指针（exe 0x7FF7… + dll 0x7FFA… 混合），content_type 每次运行都变（ASLR）。**只有 root_name 干净**。
+  - 游戏**不调 XamEnumerate**（只创建枚举器拿计数，然后按硬编码 root 打开）。
+  - rexglue 用 file_name 定位包 → 垃圾 file_name → `exists=false` → 5 次全失败 → 脏盘。
+
+**🔧 下一步（精确）：**
+- content_data 由 `sub_8363A408` 的**调用者**构建。需向上追这个客户机调用链，找出 content_data 为何未初始化（可能：重编译丢了初始化 / 缺前置调用 / 游戏期望 zero-init）。
+- 备选策略：让 rexglue 按 root_name 或 device_id 定位内容（hacky）；或对比 Xenia 如何处理 GTA V 这种 content open。
+- **诊断已就位**：rexglue xeXamContentCreate 有 `[diag]` 日志；DLL 增量重建快（仅改动文件 + 链接）。
+
+**构建/诊断要点：**
+- rexglue DLL 增量重建：`refs/rexglue-sdk/out/build/vulkan/` → `ninja <out路径>/rexruntimerd.dll` → 复制到 `test_rexglue/out/easy/`。
+- 符号化崩溃：`llvm-symbolizer --obj=rexruntimerd.dll --relative-address 0xRVA`（PDB 在 refs/rexglue-sdk/out/win-amd64/）。
+- backtrace 里**巨大偏移**=其他模块（vcruntime 等），**小偏移(<0xF00000)**=rexruntimerd 真实帧。
 
 ---
 

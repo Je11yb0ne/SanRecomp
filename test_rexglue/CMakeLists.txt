@@ -23,3 +23,16 @@ target_link_libraries(gta5_rexglue
     setupapi user32 gdi32 winmm imm32 ole32 oleaut32 shell32 version uuid comctl32
     msvcrt
 )
+
+# Standalone STFS/PIRS package extractor (GTA V 8GB install -> loose files)
+add_executable(stfs_extract stfs_extract.cpp)
+target_compile_options(stfs_extract PRIVATE /W3 /bigobj /EHa /MD)
+target_compile_definitions(stfs_extract PRIVATE SPDLOG_FMT_EXTERNAL _ITERATOR_DEBUG_LEVEL=0 NDEBUG)
+target_link_libraries(stfs_extract
+    rexruntimerd SDL3-staticrd
+    libavcodecrd libavutilrd
+    fmtrd spdlogrd snappyrd xxhashrd o1heaprd aes128rd disasmrd mspackrd
+    TracyClientrd
+    setupapi user32 gdi32 winmm imm32 ole32 oleaut32 shell32 version uuid comctl32
+    msvcrt
+)
