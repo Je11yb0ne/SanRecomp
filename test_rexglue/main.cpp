@@ -126,9 +126,18 @@ REX_HOOK_RAW(sub_8239CBA8) {
     __imp__sub_8239CBA8(ctx, base);
 }
 
-// REMOVED: sub_8364D6C8 / sub_8299BD70 hooks that bypassed disc detection.
-// Instead, we now properly implement XamSwapDisc in the DLL to swap disc
-// content at runtime — see src/kernel/xam/xam_info.cpp.
+// Log + force-success: sub_8299BD70 returns non-zero so caller marks disc inserted.
+REX_HOOK_RAW(sub_8299BD70) {
+    uint32_t state = ctx.r3.u32 & 0xFF;
+    uint32_t disc  = ctx.r4.u32 & 0xFF;
+    static FILE* f = nullptr;
+    if (!f) { f = fopen("gta5_disc_state.txt", "w"); }
+    if (f) { fprintf(f, "sub_8299BD70(state=%u disc=%u) lr=0x%08X\n",
+               state, disc, (uint32_t)ctx.lr); fflush(f); }
+    __imp__sub_8299BD70(ctx, base);
+    if (f) { fprintf(f, "  -> orig_r3=0x%llX FORCING 1\n", ctx.r3.u64); fflush(f); }
+    ctx.r3.u64 = 1;  // non-zero = disc inserted successfully
+}
 
 // === DIAGNOSTIC: XamContentCreateEx content_data probe ===
 // sub_8363A3B8 is the guest XamContentCreateEx wrapper; it throws
