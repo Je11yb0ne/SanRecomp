@@ -126,25 +126,9 @@ REX_HOOK_RAW(sub_8239CBA8) {
     __imp__sub_8239CBA8(ctx, base);
 }
 
-// === BYPASS: multi-disc swap check ===
-// sub_8364D6C8 wraps XamSwapDisc and adds error-code processing that feeds
-// into the game's "insert disc1" decision.  Force it to always return
-// X_ERROR_SUCCESS so the game never enters the disc-swap / install prompt.
-REX_HOOK_RAW(sub_8364D6C8) {
-    (void)base;
-    ctx.r3.u64 = 0;  // X_ERROR_SUCCESS
-}
-
-// === BYPASS: disc/content state machine ===
-// sub_8299BD70(r21=state, r30=disc) is the top-level disc-swap/content state
-// machine.  Its callers check the return value:
-//   state=1 → needs non-zero to mark disc as inserted
-//   state=2 → called for side effect
-// Force an immediate non-zero return to skip the entire disc/install check.
-REX_HOOK_RAW(sub_8299BD70) {
-    (void)base;
-    ctx.r3.u64 = 1;
-}
+// REMOVED: sub_8364D6C8 / sub_8299BD70 hooks that bypassed disc detection.
+// Instead, we now properly implement XamSwapDisc in the DLL to swap disc
+// content at runtime — see src/kernel/xam/xam_info.cpp.
 
 // === DIAGNOSTIC: XamContentCreateEx content_data probe ===
 // sub_8363A3B8 is the guest XamContentCreateEx wrapper; it throws
