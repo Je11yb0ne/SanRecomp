@@ -36,3 +36,8 @@ target_link_libraries(stfs_extract
     setupapi user32 gdi32 winmm imm32 ole32 oleaut32 shell32 version uuid comctl32
     msvcrt
 )
+
+# Standalone RPF7 (GTA V) TOC reader/validator — no rexglue deps, just BCrypt.
+add_executable(rpf_read rpf_read.cpp)
+target_compile_options(rpf_read PRIVATE /W3 /EHsc /MD)
+target_link_libraries(rpf_read bcrypt)

@@ -95,6 +95,28 @@ D:\Games\Xenia\gta5\content\0000000000000000\545408A7\00000002\545408A70000000{0
 - 候选源：(a) 解包 partN.rpf（正确文件名）；(b) 用户 OpenIV 解包的 gta5 extract（.xtd，需重命名 x→#）；(c) 写 RPF7 解包器。
 - 文件名 `#` vs `x` 约定是关键：游戏请求 `startup.#td`，rexglue VFS 字面匹配。
 
+### 🎯 RPF7 格式破解 + 验证通过（2026-06-19 续）
+
+**关键纠正（@用户）**：磁盘文件名是 `.xtd`/`.xdd`/`.xft`（OpenIV/社区对）；游戏请求用 `#` 占位符 `.#td`/`.#dd`/`.#ft`；RAGE 查找时 `#`→`x`(Xenon)。rexglue 没做这映射 → entry not found。日志确认游戏请求 74×`.#td` + 10×`.#ft` + 6×`.#dd`。
+
+**OpenIV 解包不可用**：①浅层（957 嵌套 rpf 没递归解）②有损（`.#td`→`.xtd` 改名、`.meta`→`.xml` **改内容**）。
+
+**360 RPF7 格式（参考 refs/RPF7-master balika011 + refs/CodeWalker-master，已实测验证）**：
+- **密钥**：`test_rexglue/keys/gtav_360_rpf.key`（32B AES-256，= `D:\Games\Xenia\gta5\(360)key.dat`）
+- **Header(16B)**：magic"RPF7"，entries(BE u32)，infos(BE: bit31=platform, bit28-30=filenamesShift, bit0-27=filenamesLength)，flags(=0x0FFFFFF7 加密)
+- **TOC 解密**：header 后 `entries*16 + filenamesLength` 字节，**单次 AES-256-ECB**（360；PC 才是 16 轮！）
+- **Entry(16B)**：offset(3B,×512扇区,bit7=isResource)，compressedSize(3B)，nameOffset(2B BE)，[dir: subIndex(4B)+subCount(4B)] / [file: uncompressedSize(4B)+isEncrypted(4B)]
+- **目录标志**：offset==0x7FFFFF；**文件名**：names blob 在 `entries*16` 偏移，名字在 `nameOffset<<shift`
+- **压缩**：360 = **LZX**（rexglue 有 mspackrd / 可移植 balika011 lzx.c）；文件 offset<<9；compressedSize==0=未压缩
+- **实测验证**（`test_rexglue/rpf_read.exe` 工具）：
+  - xbox360a.rpf → `data/{cdimages/{scaleform_*.rpf}, lang/{american.rpf,...}}`
+  - xbox360b.rpf → `textures/{analogueoverlay.xtd, frontend.xtd, ...}` ← 游戏要的纹理！
+  - common.rpf → `data/{action_table.meta, common.meta, ...}` ← 真 .meta（证实 OpenIV 有损）
+
+**方案确定：写 rexglue `RpfContainerDevice`（仿 StfsContainerDevice），挂载 xbox360a/b.rpf→game:\xbox360\、common.rpf→game:\common\**。设备内部：递归嵌套 rpf + LZX 解压 + `#→x` 解析。**纯可移植 C++ → Switch 直接复用**（用户确认要做 Switch 版）。
+
+**下一步**：写 RpfContainerDevice（RPF7 解析已验证）→ 挂载 → 重跑确认 game:\xbox360\*.#td 解析成功 → 游戏加载真实资产。
+
 ---
 
 ## 已完成阶段

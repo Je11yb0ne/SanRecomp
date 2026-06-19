@@ -525,3 +525,4 @@ network_bypass_test*.txt
 profile_bypass_test*.txt
 watchdog_test*.txt
 refs/rexglue-sdk-wiki/
+test_rexglue/keys/
