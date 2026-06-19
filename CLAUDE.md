@@ -293,17 +293,33 @@ REXGLUE="refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe"
 3. **资源 RSC7 重建**：资源条目服务为 `[16B RSC7头(magic/version/sysFlags/gfxFlags 大端)] + 压缩体`；非资源解压后服务；`#→x` 在 ResolvePath 回退。
 4. **AES**：bundled tiny-aes（AES256+ECB，public 符号重命名 `RpfAes_*` 防冲突）；**LZX**：bundled cabextract（分块）。密钥从 `<game_root>/(360)key.dat` 运行时读取（不入 git）。
 
-### 🔴 下一阶段：冲过「插入 disc 1」光盘/安装检查（用户确认的真实阻塞）
+### 🎯🎯 决定性根因：我们一直在重编译 DISC 1（安装器），不是游戏！（2026-06-19 用户揭示）
 
-- **用户目视确认：窗口显示「插入 disc 1」**（GTA V 光盘/安装检查界面），不是 logo/菜单。
-- **重要含义**：GPU 渲染管线 + 资产管线**都工作**——游戏正在用真实资产渲染「插入光盘」UI（所以有真实 swap texture + 60Hz）。资产门槛（本会话工作）已打通且被证明有效。
-- **真正的门**：光盘/安装存在性检查。「和之前一样」= 这是先于本会话的长期阻塞，与资产正交。
-- **初步排查**：`XamLoaderGetDvdTrayState` 已返回 1（光盘在位），所以不是简单托盘检查 → 是更深的检查（media ID / execution ID 的 disc number/count / **安装检测**）。参考 skate3recomp 有完整 `IsGameInstalled`/`InstalledMarketplaceContentPath`（查 content_root/<profile>/<titleid>/00000002/ + Headers/）——GTA V 很可能因为在期望的 content 位置检测不到完整安装（缺 header/manifest）而提示从 disc 1 安装。
-- **下一步（聚焦新阶段）**：(1) 提高内核日志级别（trace 全类别）或 instrument，捕获 GTA V 在显示界面前调用的确切 disc/media/content API（XamGetExecutionId 的 disc_number/disc_count/media_id、XamContentCreate/install 检测）+ rexglue 返回值；(2) 据此满足检查——可能 set execution_id 的 disc 信息、或在期望位置提供完整安装结构（含 header），或 hook 游戏 disc-check 函数。
-- 资产相关：剩余 ~13 可选缺失文件回报递减，先解决光盘门。
+GTA V 360 = **disc1(install/安装器)** + **disc2(play/游戏本体)**。Xenia 玩法 = 装 disc1 → **跑 disc2**。
 
-### （旧）2026-06-19 早期推断（已被用户目视纠正）
-- 曾以为真实帧呈现 = 接近目标；实际呈现的是「插入 disc 1」界面。GPU/资产证明可用，门在光盘/安装检查。
+**MD5 铁证**：
+- 我们重编译的 `D:/Games/Xenia/gta5/default.xex` = `58cef5ae...` = **DISC 1（安装盘）**（= Xenia `00007000/D49129A5FEED466719ED`，含 disc1.rsn + install_music.wma）。
+- **DISC 2（play）** = `62d61cde...`（**不同 xex**）= Xenia `00007000/7AA7931FF6863459F017/default.xex`。
+- 所以游戏显示「插入 disc 1」= 安装器行为。**所有 disc1 上的 bring-up 工作（渲染 hook、缺失函数、死锁修复）都是在安装器上**。
+
+**本地 Xenia 工作安装结构**（`D:\Games\xenia_manager\Emulators\Xenia Canary\content\0000000000000000\545408A7\`）：
+- `00000002/545408A700000{0-3}/partN.rpf` = 8GB 安装（marketplace content）。
+- `00007000/7AA7931FF6863459F017/` = **DISC 2 play**（default.xex + xbox360a/b.rpf + common.rpf + audio_rel.rpf + sfx）。
+- `00007000/D49129A5FEED466719ED/` = DISC 1 install（+disc1.rsn + install_music.wma）。
+- `000B0000/tu00000009_00000000/{disc001,disc002}` = title update。
+- `Headers/` = 各 content type 的 STFS header（Xenia 安装标记）。
+
+### 🔴 当前任务：改用 DISC 2（play）重编译运行（已启动 codegen）
+
+- **manifest**: `test_rexglue/gta5_disc2_manifest.toml`（file_path = disc2 xex，out = `generated/disc2`，functions 空——运行时收集器 + --force 处理）。
+- **codegen 进行中**：`rexglue.exe codegen gta5_disc2_manifest.toml -v --force` → `generated/disc2/`。
+- **后续步骤**：
+  1. codegen 完成 → `test_rexglue/CMakeLists.txt` 把 glob+include 从 `generated/default` 改 `generated/disc2` → 重建 exe（200MB，慢）。
+  2. game_data_root 用含 disc2 play 数据 + install 的位置（Xenia content 7AA7931 有 play 数据；install 在 00000002）。我的 RPF 设备已挂 install\part0-3 + xbox360a/b。
+  3. 运行 → ResolveIndirectFunction 收集器逐个发现 disc2 缺失函数（同 disc1 流程）。
+  4. 重做渲染 hook（sub_822D41E8 等地址 disc2 不同，需重新定位）。
+- **复用**：RPF 资产设备 + VFS overlay（运行时 DLL，游戏无关）+ main.cpp 的 audio/input/kernel_init config + AttachWindow + 收集器，**全部原样复用**。
+- 目标：disc2 游戏本体渲染真实画面（logo/loading/menu）。
 
 ---
 

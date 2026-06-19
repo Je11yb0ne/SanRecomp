@@ -1,0 +1,18 @@
+# GTA V DISC 2 (PLAY disc) Recompilation Manifest — rexglue-sdk v0.8.1.32
+#
+# CRITICAL: disc1 (install, xex md5 58cef5ae) is the INSTALLER — running it shows
+# the "insert disc 1" UI. disc2 (play, xex md5 62d61cde) is the actual GAME.
+# This manifest targets disc2's default.xex (from the local Xenia GoD content).
+[project]
+name = "gta5_recomp"
+sdk_version = "0.8.0"
+game_root = "D:/Games/xenia_manager/Emulators/Xenia Canary/content/0000000000000000/545408A7/00007000/7AA7931FF6863459F017"
+
+[entrypoint]
+file_path = "D:/Games/xenia_manager/Emulators/Xenia Canary/content/0000000000000000/545408A7/00007000/7AA7931FF6863459F017/default.xex"
+out_directory_path = "generated/disc2"
+includes = []
+
+# disc2 has its own code layout; missing indirect-call targets are discovered at
+# runtime via main.cpp's ResolveIndirectFunction collector (+ codegen --force).
+[entrypoint.functions]
