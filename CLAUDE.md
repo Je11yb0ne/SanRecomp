@@ -293,19 +293,17 @@ REXGLUE="refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe"
 3. **资源 RSC7 重建**：资源条目服务为 `[16B RSC7头(magic/version/sysFlags/gfxFlags 大端)] + 压缩体`；非资源解压后服务；`#→x` 在 ResolvePath 回退。
 4. **AES**：bundled tiny-aes（AES256+ECB，public 符号重命名 `RpfAes_*` 防冲突）；**LZX**：bundled cabextract（分块）。密钥从 `<game_root>/(360)key.dat` 运行时读取（不入 git）。
 
-### 🔴 下一阶段：引擎推进到可见 logo/菜单（非文件问题）
+### 🔴 下一阶段：冲过「插入 disc 1」光盘/安装检查（用户确认的真实阻塞）
 
-- 游戏**已过资产门槛**：真实资产加载，~13 个真实缺失文件（creaturemetadata/occlusion/scaleform_generic 等，盘+安装都没有）是**可选探测**（每个请求 1 次，游戏容忍）。
-- 游戏**存活 + 呈现真实帧**（GPU PRESENT 1280x720 三缓冲 + XamInputGetCapabilities 轮询）。
-- **需用户目视确认窗口**：游戏在呈现真实 swap texture，窗口应显示 logo/加载/菜单。若窗口仍黑但 GPU 在 PRESENT 真实纹理 → 查 plume swapchain 呈现链；若显示内容 → 目标达成。
-- **rexglue DLL 重建**（改 src 后）：
-  ```bash
-  export VSROOT="/c/Program Files/Microsoft Visual Studio/18/Community"
-  export PATH="$VSROOT/VC/Tools/Llvm/x64/bin:/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64:$VSROOT/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja:$VSROOT/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin:$PATH"
-  cd refs/rexglue-sdk/out/build/vulkan && ninja rexruntimerd.dll
-  cp refs/rexglue-sdk/out/win-amd64/rexruntimerd.dll test_rexglue/out/easy/
-  ```
-- **跑游戏**：`cd test_rexglue/out/easy && ./gta5_rexglue.exe`（窗口 GUI；日志 `gta5_kernel.log`）。
+- **用户目视确认：窗口显示「插入 disc 1」**（GTA V 光盘/安装检查界面），不是 logo/菜单。
+- **重要含义**：GPU 渲染管线 + 资产管线**都工作**——游戏正在用真实资产渲染「插入光盘」UI（所以有真实 swap texture + 60Hz）。资产门槛（本会话工作）已打通且被证明有效。
+- **真正的门**：光盘/安装存在性检查。「和之前一样」= 这是先于本会话的长期阻塞，与资产正交。
+- **初步排查**：`XamLoaderGetDvdTrayState` 已返回 1（光盘在位），所以不是简单托盘检查 → 是更深的检查（media ID / execution ID 的 disc number/count / **安装检测**）。参考 skate3recomp 有完整 `IsGameInstalled`/`InstalledMarketplaceContentPath`（查 content_root/<profile>/<titleid>/00000002/ + Headers/）——GTA V 很可能因为在期望的 content 位置检测不到完整安装（缺 header/manifest）而提示从 disc 1 安装。
+- **下一步（聚焦新阶段）**：(1) 提高内核日志级别（trace 全类别）或 instrument，捕获 GTA V 在显示界面前调用的确切 disc/media/content API（XamGetExecutionId 的 disc_number/disc_count/media_id、XamContentCreate/install 检测）+ rexglue 返回值；(2) 据此满足检查——可能 set execution_id 的 disc 信息、或在期望位置提供完整安装结构（含 header），或 hook 游戏 disc-check 函数。
+- 资产相关：剩余 ~13 可选缺失文件回报递减，先解决光盘门。
+
+### （旧）2026-06-19 早期推断（已被用户目视纠正）
+- 曾以为真实帧呈现 = 接近目标；实际呈现的是「插入 disc 1」界面。GPU/资产证明可用，门在光盘/安装检查。
 
 ---
 
