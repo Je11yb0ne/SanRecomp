@@ -1,0 +1,25 @@
+# GTA V DISC 1 (INSTALL disc) Recompilation Manifest — rexglue-sdk v0.8.1.32
+#
+# disc1 (install, xex md5 58cef5ae) is the INSTALLER — running it should
+# properly install the 8GB marketplace content to HDD, setting the internal
+# state markers that the play disc (disc2) expects.
+[project]
+name = "gta5_recomp_disc1"
+sdk_version = "0.8.0"
+game_root = "D:/Games/Xenia/gta5/disc1(install)"
+
+[entrypoint]
+file_path = "D:/Games/Xenia/gta5/disc1(install)/default.xex"
+out_directory_path = "generated/disc1"
+includes = []
+
+# Same entrypoint functions as disc2 — the two discs share the same code
+# layout, so the same tail-call targets (functions sitting after a bctr/blr
+# terminator that the analyzer treats as unreachable) apply.
+[entrypoint.functions]
+0x8255DC48 = { end = "0x8255DC58" }
+0x8255DC88 = { end = "0x8255DCB8" }
+0x8256BCC8 = { end = "0x8256BCE0" }
+0x83366BD0 = { end = "0x83366BEC" }
+0x836E9A58 = { end = "0x836E9A80" }
+0x836E9A70 = { end = "0x836E9A80" }

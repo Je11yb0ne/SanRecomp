@@ -1,0 +1,21 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="LibertyV.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="ExportResourcesChoice" Type="LibertyV.Settings.ExportResourcesChoice" Scope="User">
+      <Value Profile="(Default)">0</Value>
+    </Setting>
+    <Setting Name="Xbox360KeyFile" Type="System.String" Scope="User">
+      <Value Profile="(Default)">key_xbox360.dat</Value>
+    </Setting>
+    <Setting Name="PS3KeyFile" Type="System.String" Scope="User">
+      <Value Profile="(Default)">key_ps3.dat</Value>
+    </Setting>
+    <Setting Name="Xbox360KeyFileEnabled" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PS3KeyFileEnabled" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>

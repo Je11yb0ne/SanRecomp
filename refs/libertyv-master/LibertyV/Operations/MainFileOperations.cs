@@ -1,0 +1,200 @@
+﻿/*
+ 
+    LibertyV - Viewer/Editor for RAGE Package File version 7
+    Copyright (C) 2013  koolk <koolkdev at gmail.com>
+   
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+  
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+   
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ 
+ */
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Windows.Forms;
+using LibertyV.Rage.RPF.V7;
+using System.IO;
+using LibertyV.Rage;
+using LibertyV.Utils;
+
+namespace LibertyV.Operations
+{
+    static class MainFileOperations
+    {
+        public static bool CanSave(LibertyV window)
+        {
+            return window.File != null;
+        }
+
+        public static bool CanOpen(LibertyV window)
+        {
+            return window.TempOutputFile == null;
+        }
+
+        public static void Open(LibertyV window, string filename)
+        {
+            RPF7File file = null;
+            Stream stream = null;
+            try
+            {
+                new ProgressWindow("Open", progress =>
+                {
+                    progress.SetMessage("Loading..");
+                    progress.SetProgress(-1);
+                    stream = File.OpenRead(filename);
+                    file = new RPF7File(stream, Path.GetFileName(filename), filename);
+                }).Run();
+            }
+            catch (RPFParsingException ex)
+            {
+                MessageBox.Show(ex.Message, "Failed to load RPF", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (stream != null)
+                {
+                    stream.Close();
+                }
+                return;
+            }
+            window.LoadRPF(file);
+        }
+
+        public static void Open(LibertyV window)
+        {
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Filter = "RAGE Package Format|*.rpf";
+            openFileDialog.Title = "Select a file";
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                Open(window, openFileDialog.FileName);
+            }
+        }
+
+        public static void Save(LibertyV window)
+        {
+
+            if (MessageBox.Show("Are you sure you want to save all changes?", "Save", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != System.Windows.Forms.DialogResult.Yes)
+            {
+                return;
+            }
+            string originalFilename = window.File.Filename;
+            String filePath = window.File.FilePath;
+
+            // Write to temporary file
+            string tempFilePath = null;
+            FileStream file = null;
+            if (filePath != null)
+            {
+                tempFilePath = filePath + "." + Path.GetRandomFileName();
+                file = System.IO.File.Create(tempFilePath);
+            }
+            else
+            {
+                // This is a temporary file, we need to open it with the right flags
+                tempFilePath = window.TempOutputFile;
+                file = new FileStream(tempFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
+            }
+
+            ProgressWindow progress = new ProgressWindow("Saving", update => window.File.Write(file, update), true);
+            try
+            {
+                progress.Run();
+            }
+            catch (OperationCanceledException)
+            {
+                // This operation cancelled    
+                if (filePath != null)
+                {
+                    // delete the file
+                    file.Close();
+                    System.IO.File.Delete(tempFilePath);
+                }
+                else
+                {
+                    // Well it is a temporary file, so we don't want to delete it, just make it empty again
+                    file.SetLength(0);
+                    file.Close();
+                }
+                MessageBox.Show("Operation canceled.");
+                return;
+            }
+
+            file.SetLength(file.Position);
+
+            if (filePath != null)
+            {
+                // Update the file and reopen it
+                file.Close();
+                window.CloseRPF(false);
+                System.IO.File.Delete(filePath);
+                System.IO.File.Move(tempFilePath, filePath);
+
+                // Now load the file
+                file = System.IO.File.Open(filePath, FileMode.Open);
+                window.LoadRPF(new RPF7File(file, originalFilename, filePath), true);
+            }
+            else
+            {
+                // Notice: We are not going to use the file that we just wrote, because if we are going to write it again, we will read and write from the same file
+                // We waste little bit resources right now (because we doesn't release the old resource because we aren't using the new one), but it isn't so bad
+                file.Close();
+            }
+        }
+
+        public static void SaveAs(LibertyV window)
+        {
+            string result = GUI.FileSaveSelection(Path.GetFileName(window.File.Filename));
+            if (result == null)
+            {
+                return;
+            }
+            FileStream file = null;
+            try
+            {
+                file = System.IO.File.Create(result);
+            }
+            catch (IOException ex)
+            {
+                MessageBox.Show(ex.Message, "Failed to open file for writing", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            ProgressWindow progress = new ProgressWindow("Saving", update => window.File.Write(file, update), true);
+            try
+            {
+                progress.Run();
+            }
+            catch (OperationCanceledException)
+            {
+                // delete the file
+                file.Close();
+                System.IO.File.Delete(result);
+                MessageBox.Show("Operation canceled.");
+                return;
+            }
+
+            // Now open this file
+            file.Seek(0, SeekOrigin.Begin);
+            window.LoadRPF(new RPF7File(file, Path.GetFileName(result), result), true);
+        }
+
+        public static void Close(LibertyV window)
+        {
+            window.CloseRPF();
+        }
+
+        public static void Exit(LibertyV window)
+        {
+            window.Close();
+        }
+    }
+}
