@@ -161,6 +161,28 @@ REX_HOOK_RAW(sub_8364D6C8) {
     __imp__XamSwapDisc(ctx, base);
 }
 
+// === MASTER SWITCH: sub_82985760 ===
+// The caller checks: if (sub_82985760() == 0) → skip disc swap logic.
+// Always return 0 so the disc swap branch is never entered.
+REX_HOOK_RAW(sub_82985760) {
+    (void)base;
+    ctx.r3.u64 = 0;
+}
+
+// sub_8299FBF8 is called in two modes:
+//   Call 1 (r4=0): early boot initialization — let it run.
+//   Call 2 (r4=1): disc swap logic — skip entirely (return success).
+REX_HOOK_RAW(sub_8299FBF8) {
+    uint32_t r4 = ctx.r4.u32 & 0xFF;
+    if (r4 == 1) {
+        // Disc swap call — skip
+        ctx.r3.u64 = 0;
+        return;
+    }
+    // Initialization call — let original run
+    __imp__sub_8299FBF8(ctx, base);
+}
+
 // === DIAGNOSTIC: XamContentCreateEx content_data probe ===
 // sub_8363A3B8 is the guest XamContentCreateEx wrapper; it throws
 // utf8::invalid_utf8 in the kernel when content_data.file_name_raw holds
