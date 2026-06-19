@@ -302,6 +302,35 @@ xeXamContentCreate root='part0' size=308 ctype=E9010000 flags=3 exists=false
 - ✅ 9 个缺失函数已 codegen
 - 🔴 加载故事模式无限转圈，所有工作线程 WAIT
 
+### 🎮 Switch 移植参考：UnleashedRecomp-NX 文件挂载方案
+
+**项目**：`refs/UnleashedRecomp-NX/`（Sonic Unleashed, Switch 版, XenonRecomp 架构）
+
+**核心文件**：`UnleashedRecomp/install/iso_file_system.{h,cpp}`
+
+**ISO 直接挂载方案**（不提取）：
+```
+ISOFileSystem:
+  MemoryMappedFile → ISO 文件内存映射
+  fileMap → {path → (offset, size)}
+  load(path) → 直接从 ISO 读取
+```
+
+**PC vs Switch 路径**：
+
+| | PC（当前） | PC（可选） | Switch（将来） |
+|---|---|---|---|
+| 文件来源 | 已提取目录 | ISO 直挂 | ROM/SD卡 |
+| 挂载方式 | `HostPathDevice` | `IsoContainerDevice`(需实现) | `ISOFileSystem`(mmap) |
+| 优点 | 简单 | 不占额外空间 | 不占额外空间 |
+| 缺点 | 需先解压两盘 | 需实现 ISO 解析 | 需适配 Switch FS |
+
+**对 GTA V 的启示**：
+- rexglue 已有 `StfsContainerDevice`（STFS 包直读）、`RpfContainerDevice`（RPF 归档直读）
+- 加一个 `IsoContainerDevice`（ISO 直读）就能直接从 `disc1.iso` / `disc2.iso` 读取
+- 不需要提前提取两盘到 `disc1(install)/` 和 `disc2(play)/`
+- Switch 版可直接用 ISOFileSystem mmap ISO 文件
+
 ### 📋 下一步
 
 1. **实现 reblue 式换盘 UI**：`OnFinalizePaths` 弹出文件选择 → 挂载 disc1/disc2 → 启动游戏
