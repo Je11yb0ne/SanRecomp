@@ -36,14 +36,16 @@ SanRecomp is a static recompilation project porting GTA V (Xbox 360) to PC. Fork
   - 自动生成函数导出、异常处理、模板脚手架
 - XenonRecomp 保留作为辅助工具
 
-**Current Phase: rexglue 集成 — XEX 加载成功，游戏开始执行**
-- ✅ rexglue 预编译 SDK v0.8.1.32 成功集成
-- ✅ 197 PPC 文件编译 + 链接（200MB exe）
-- ✅ Runtime::Setup() 成功
-- ✅ LoadXexImage 通过 VFS `game:\default.xex` 路径成功
-- ⚠️ 游戏加载后 segfault——需调试崩溃原因
-- 🔧 exe 位置：`test_rexglue/out/v6/gta5_rexglue.exe`
-- 🔧 game_data_root：`D:/Games/Xenia/gta5`（含 RPF 资产）
+**Current Phase: 12 — 安装检测门（已大幅推进，但仍未突破）**
+- ✅ DISC2（play，游戏本体）codegen + build + run 成功
+- ✅ Content 枚举/打开全部修复：`.header` 文件（Headers/00000002/*.header）、`common` 目录、ODD 枚举实现
+- ✅ `license_mask` CVAR = 1, `XamContentIsGameInstalledToHDD` → REX_EXPORT_STUB_RETURN(0)
+- ✅ Hook `sub_8364D6C8`（XamSwapDisc 包装器）+ `sub_8299BD70`（光盘状态机）→ 绕过换盘检测
+- ✅ `XamSwapDisc` 返回 SUCCESS，不再无限重试；0 trap hits
+- 🔴 **窗口仍显示「插入 disc1」** — 主线程等待 sem `0xF8000A94`，偶尔醒来渲染（14-28 VdSwap/30-45s）
+- 🔴 根因可能不在 content/API 层 —— 游戏 logic 在更高层决定渲染"插入 disc1"UI 状态
+- 🔧 exe 位置：`test_rexglue/out/easy/gta5_rexglue.exe`（disc2，generated/disc2）
+- 🔧 game_data_root：`D:/Games/Xenia/gta5`（含 RPF 资产 + install\part0-3.rpf）
 - 分支：`feature/rexglue-source-build`
 
 **⚠️ 工作纪律（每次必读）：**
@@ -309,17 +311,54 @@ GTA V 360 = **disc1(install/安装器)** + **disc2(play/游戏本体)**。Xenia 
 - `000B0000/tu00000009_00000000/{disc001,disc002}` = title update。
 - `Headers/` = 各 content type 的 STFS header（Xenia 安装标记）。
 
-### 🔴 当前任务：改用 DISC 2（play）重编译运行（已启动 codegen）
+### ✅ DISC 2（play）已重编译运行 → 但撞上共享「安装检测门」（2026-06-19）
 
-- **manifest**: `test_rexglue/gta5_disc2_manifest.toml`（file_path = disc2 xex，out = `generated/disc2`，functions 空——运行时收集器 + --force 处理）。
-- **codegen 进行中**：`rexglue.exe codegen gta5_disc2_manifest.toml -v --force` → `generated/disc2/`。
-- **后续步骤**：
-  1. codegen 完成 → `test_rexglue/CMakeLists.txt` 把 glob+include 从 `generated/default` 改 `generated/disc2` → 重建 exe（200MB，慢）。
-  2. game_data_root 用含 disc2 play 数据 + install 的位置（Xenia content 7AA7931 有 play 数据；install 在 00000002）。我的 RPF 设备已挂 install\part0-3 + xbox360a/b。
-  3. 运行 → ResolveIndirectFunction 收集器逐个发现 disc2 缺失函数（同 disc1 流程）。
-  4. 重做渲染 hook（sub_822D41E8 等地址 disc2 不同，需重新定位）。
-- **复用**：RPF 资产设备 + VFS overlay（运行时 DLL，游戏无关）+ main.cpp 的 audio/input/kernel_init config + AttachWindow + 收集器，**全部原样复用**。
-- 目标：disc2 游戏本体渲染真实画面（logo/loading/menu）。
+- **manifest**: `test_rexglue/gta5_disc2_manifest.toml`（file_path=disc2 xex，out=`generated/disc2`，+6 个 `[entrypoint.functions]`——disc2 与 disc1 共享代码布局，同样 6 个 tail-call 目标）。
+- **build**: `CMakeLists.txt` glob+include 切到 `generated/disc2`，重链成功（200MB exe，`test_rexglue/out/easy/`）。
+- **复用**：RPF 资产设备 + VFS overlay + main.cpp 的 audio/input/kernel_init config + AttachWindow + 收集器，**原样复用**（DLL 游戏无关，hook 地址 disc2 与 disc1 相同）。
+- **✅ disc2 确是游戏本体**：跑 35s 无 FATAL，`xstart ENTERED`，`sub_822D41E8 render/VdSwap count=900`，946 GPU PRESENT，请求 `frontend`+`startup` 资产，解析 `XamShowPartyUI` 社交 UI，`XamContentCreateEnumerator: added 5 items`。
+
+### 🔴🔴 决定性认知修正：「插入 disc1」是**共享的安装检测门**，与盘无关
+
+- disc1、disc2 **都显示「插入 disc1」**（@用户「怎么和之前显示的还是一模一样」）。证明**不是跑错 exe**，是两盘共享的安装检测代码——游戏检测不到安装就位 → 渲染「插入 disc1」UI 状态（非错误）。
+- **根因铁证**（`xeXamContentCreate` [diag]）：
+  ```
+  xeXamContentCreate root='part0' size=308 ctype=E9010000 flags=3 exists=false
+    dev+ct=C0697BF0... dname=DA9FF67B... fn42=D0BB27A1...  ← content_data 全是未初始化宿主指针
+  ```
+  游戏打开安装内容（root='part0'..'part3'，OPEN_EXISTING）传的 **content_data 是未初始化垃圾**（device_id/content_type/file_name/display_name=宿主指针，ctype 每次 ASLR 变；只有 root_name 干净）→ exists=false → 认为没装 →「插入 disc1」。与 Phase 11 disc1 观察一致。
+
+### 🔧 Phase 12 进展（2026-06-19 会话，大量修改）
+
+**DLL 修改**（`refs/rexglue-sdk/src/`，已重建部署到 `test_rexglue/out/easy/`）：
+
+| 文件 | 改动 |
+|------|------|
+| `src/system/xam/content_manager.cpp` | `OpenContentByRootName` 加日志（成功/失败）；`ResolvePath` 最长前缀+并集 overlay |
+| `src/kernel/xam/xam_content.cpp` | `license_mask` CVAR=1；ODD 枚举注入 1 个 disc item；`XamContentIsGameInstalledToHDD` → `REX_EXPORT_STUB_RETURN(0)`；枚举器参数日志；`xeXamContentCreate` 结果日志 |
+| `src/kernel/xam/xam_info.cpp` | `XamSwapDisc` 返回 SUCCESS（非 DEVICE_NOT_CONNECTED）|
+
+**Content 布局**（`AppData/Roaming/SanRecomp/save/`）：
+- `Headers/00000002/{part0-3,common}.header` — 含 `XCONTENT_AGGREGATE_DATA` + `license_mask=1`
+- `00000002/common/` — 空目录，让 `OpenContentByRootName("common")` 成功
+- `00000002/{part0-3}/` — 来自 STFS 提取的 `partN.rpf` + `.timestamp`
+
+**游戏 Hook**（`test_rexglue/main.cpp`）：
+- `sub_8364D6C8` — XamSwapDisc 包装器强制返回 0
+- `sub_8299BD70` — 光盘状态机强制返回 1（非零=光盘已插入，调用者据此写全局标记）
+
+**当前行为**：
+- Content 枚举返回 7 items (6 HDD + 1 ODD)，所有 root 打开成功
+- 0 次 `XamSwapDisc` 调用，0 次 PPC trap hit
+- VdSwap ~14-28/30-45s（低），GPU PRESENT 正常（~1200-1700/30-45s）
+- 主线程等待 sem `0xF8000A94`，偶尔活跃
+- **画面仍是「插入 disc1」**
+
+**下一步选项**：
+1. 进一步 RE 游戏函数——追踪 `sub_8299BD70` 调用者以上的状态链
+2. 用 IDA XEX loader 正确加载 default.xex，分析完整调用链
+3. 搜索 RPF 归档中 "insert disc" 相关 UI 资源，反向追踪触发条件
+4. 考虑"插入 disc1"可能是加载画面，需等更久/game config 触发
 
 ---
 

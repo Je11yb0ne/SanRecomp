@@ -4,7 +4,7 @@
 
 **Rule:** Never stop. Update after each phase. Just work.
 
-**Current Phase: 11 — 安装 8GB STFS 数据让 game: 解析资源** ⚡ NEXT
+**Current Phase: 12 — 安装检测门（content_data 垃圾 → 「插入 disc1」）** ⚡ NEXT
 
 ---
 
@@ -166,6 +166,83 @@ D:\Games\Xenia\gta5\content\0000000000000000\545408A7\00000002\545408A70000000{0
 - 游戏不再卡资产（真实资产加载中，可选缺失被容忍，存活渲染）。
 - 但还没可见 logo（rockstar_logos.bik 在 xbox360b，设备有，游戏尚未请求）。游戏在资产枚举后 fs 转静（在做引擎 init / 等线程 / 处理已加载数据）。
 - **下一步**：诊断引擎为何在资产加载后未推进到 logo 播放（非文件问题；可能 GPU 命令翻译、线程同步、或需更多 init）。剩余 13 可选文件回报递减，先查引擎推进。
+
+---
+
+## Phase 12 — 决定性根因：DISC1=安装器 / DISC2=游戏 + 共享「安装检测门」（2026-06-19）
+
+### 🎯 用户揭示：GTA V 360 = 两张盘
+- **disc1 (install)** xex md5 `58cef5ae` = **安装器**。运行它 = 显示「插入 disc1」UI。**我们之前所有 bring-up 工作（渲染 hook、缺失函数、死锁修复、资产管线）都跑在安装器上。**
+- **disc2 (play)** xex md5 `62d61cde` = **游戏本体**。Xenia 玩法 = 装 disc1 → 跑 disc2。
+- 两盘解压：`D:\Games\Xenia\gta5\disc1(install)\` + `disc2(play)\`（用户分开，无覆盖）。
+
+### ✅ 已切到 disc2 重编译运行（codegen + build 成功）
+- manifest：`test_rexglue/gta5_disc2_manifest.toml`（file_path=disc2 xex，out=`generated/disc2`，+6 个 `[entrypoint.functions]` 声明——disc2 共享 disc1 代码布局，同样 6 个 tail-call 目标）。
+- `CMakeLists.txt` glob+include 从 `generated/default` 切到 `generated/disc2`。重链成功（200MB exe，[204/204] Linking 13:47）。
+- **复用全部运行时件**（DLL 无关游戏）：RPF 资产设备 + VFS overlay + main.cpp 的 audio/input/kernel_init config + AttachWindow + 收集器，**原样复用**。main.cpp 未改（hook 地址 disc2 与 disc1 相同，链接通过）。
+
+### ✅ disc2 是游戏本体（证据）
+跑 35s：**无 FATAL**、`xstart ENTERED`、`sub_822D41E8 (render/VdSwap) count=900`、946 GPU PRESENT、2301 fs 行、请求 `frontend`(2)+`startup`(2) 菜单/启动资产、解析 `XamShowPartyUI`/`XamShowCommunitySessionsUI` 社交 UI、`XamContentCreateEnumerator: added 5 items`。——这些都是**游戏行为**，不是安装器。
+
+### 🔴🔴 但 disc2 **仍显示「插入 disc1」**（@用户「怎么和之前显示的还是一模一样」）
+**关键认知修正**：「插入 disc1」**不是因为跑错 exe**，而是一道**安装检测门**——disc1、disc2 **共享同一段检测代码**，两盘都撞。游戏检测不到安装就位 → 渲染「插入 disc1」提示（不是错误，是 UI 状态）。
+
+**根因铁证（`xeXamContentCreate` [diag] 日志）**：
+```
+xeXamContentCreate root='part0' size=308 ctype=E9010000 flags=3 exists=false
+  dev+ct=C0697BF0E9010000 dname=DA9FF67B... fn42=D0BB27A1...   ← content_data 全是未初始化宿主指针
+```
+- 游戏打开安装内容（root='part0'..'part3'，flags=3 OPEN_EXISTING）时传的 **content_data 是未初始化垃圾**（device_id/content_type/file_name/display_name = 宿主指针；ctype 每次 ASLR 变）。**只有 root_name 'part0' 干净**。
+- → ContentExists 失败（exists=false）→ 游戏认为「没装」→「插入 disc1」。
+- 这与 Phase 11 disc1 观察的 content_data 垃圾**完全一致** → 证明是共享门，与盘无关。
+
+### 🔧 下一步（精确）：修安装检测门，让游戏检测到安装
+1. **首选**：查 rexglue `XamContentCreateEnumerator`/`ListContent` 给游戏返回的每个内容项的 content_data（device_id / content_type=2 / file_name / display_name）是否正确填充——游戏很可能从枚举器拿 content_data 再去 open，枚举器填垃圾 → open 垃圾。
+   - 文件：`refs/rexglue-sdk/src/kernel/xam/xam_content*.cpp`、`src/system/xam/content_manager.cpp`（`ListContent`、`OpenContentByRootName`）。
+2. **对比**：skate3recomp 的 `IsInstalledMarketplaceContent`（`content_root/0000000000000000/Hex8(titleId)/00000002/` + `Headers/00000002/`）——确认我们是否缺 `Headers/` 安装标记。
+3. **对比 Xenia**：Xenia 能玩，正是因为枚举返回正确 content_data + 完整 GoD/Headers 布局。可考虑精确复刻 Xenia content 布局。
+4. 现有 `OpenContentByRootName` 回退能挂载内容（Phase 11 冲过脏盘），但**游戏更高层的安装检测仍判定未装** → 说明仅挂载不够，需要枚举/content_data 这层正确。
+
+**诊断已就位**：`xeXamContentCreate` 有 `[diag]` 日志；DLL 增量重建快。disc2 exe 已就绪（`test_rexglue/out/easy/`）。
+
+---
+
+### Phase 12c — 深入修改 + Hook 绕过（2026-06-19 续）
+
+**发现与修改（DLL + EXE）：**
+
+1. **Content 枚举修复**：
+   - 写 `.header` 文件（`Headers/00000002/{part0-3,common}.header`，含 `XCONTENT_AGGREGATE_DATA` + `license_mask=1`）
+   - 创建 `common` 目录（`OpenContentByRootName` 之前找不到）
+   - 实现 **ODD 枚举**（原来完全是 TODO，游戏用此检测光盘是否插入）→ 注入 1 个 disc item（device_id=ODD, file_name="common", display_name="GTA V"）
+
+2. **Kernel API 修复**：
+   - `license_mask` CVAR 默认 0→1（游戏可能需要此检测许可证）
+   - `XamContentIsGameInstalledToHDD`：从 `REX_EXPORT_STUB`（不设 r3，垃圾值）→ `REX_EXPORT_STUB_RETURN(0)`（明确返回成功）
+   - `XamSwapDisc`：返回 SUCCESS（失败会导致无限重试循环）
+
+3. **游戏 Hook**（`test_rexglue/main.cpp`）：
+   - `sub_8364D6C8`（XamSwapDisc 包装器）→ 强制返回 0（跳过换盘检查+内部 trap）
+   - `sub_8299BD70`（光盘状态机）→ 强制返回 1（非零=光盘已插入，调用者据此标记全局状态）
+
+4. **当前结果**：
+   - Content 枚举 7 items (6 HDD + 1 ODD)，所有 root 打开成功 ✓
+   - 0 次 `XamSwapDisc` 调用，0 次 PPC trap hit ✓
+   - 无 FATAL/崩溃 ✓
+   - **画面仍是「插入 disc1」** ❌
+   - VdSwap ~14-28/30-45s（低），GPU PRESENT 正常
+   - 主线程等待 sem `0xF8000A94`，偶尔活跃
+
+5. **根因分析**：
+   - 游戏代码中 Content 打开分为两类：(a) 用未初始化垃圾 content_data（fallback 到 `OpenContentByRootName` 成功），(b) 用枚举器返回的正确 data（`ContentExists` 返回 `true`，直接 `OpenContent`）。两类都成功。
+   - `sub_8299BD70(state, disc)` 是顶层状态机：`state=1` → 换盘/安装路径；`state=2` → 其他路径。调用者检查返回值写全局"光盘已插入"标记。
+   - Hook 已绕过这些检查，但游戏**更高层**逻辑仍决定渲染"插入 disc1" UI——可能这是一个**默认/加载状态**，或者有其他未发现的判断路径。
+
+6. **下一步选项**：
+   - 追踪 `sub_8299BD70` 以上调用链（`sub_829Axxx` 等高阶函数）
+   - 正确加载 XEX 到 IDA（需要 XEX loader 插件）
+   - 搜索 RPF 归档中"insert disc"UI 资源名称，反向追踪触发条件
+   - 考虑"插入 disc1"可能就是加载画面，需更多时间/特定配置文件触发过渡
 
 ---
 
