@@ -36,15 +36,24 @@ SanRecomp is a static recompilation project porting GTA V (Xbox 360) to PC. Fork
   - 自动生成函数导出、异常处理、模板脚手架
 - XenonRecomp 保留作为辅助工具
 
-**Current Phase: 13 — 加载故事模式死锁**
-- ✅ Phase 12 完成：突破"插入 disc1"→亮度调节→加载动画
-  - Hook `sub_82985760`=0（主开关）+ `sub_8299FBF8`(r4=1跳过) → 0次 XamSwapDisc
-  - 8 RPF 归档 3610 条目，entry-not-found 从 2002→~100
-  - GPU `gpu_allow_invalid_fetch_constants=true`（消除纹理校验警告）
-- 🔴 加载故事模式无限转圈：主线程数据处理循环，所有工作线程 WAIT
-- 🔧 Codegen 已追加 9 个缺失函数（825794B0, 82D66F40, 82DA62D8, 83426078, 83654870 等）
-- 🔧 exe：`test_rexglue/out/easy/gta5_rexglue.exe`（disc2, generated/disc2）
-- 🔧 VdSwap ~28Hz（改善），无 FATAL/崩溃
+**Current Phase: 13 — 加载死锁（未突破）**
+
+**✅ 已达成**：
+- 突破"插入 disc1"→ 亮度调节 → 加载故事模式（hook 绕过换盘）
+- 8 RPF 归档 3610 条目，`entry-not-found` 2002→~100
+- GPU `gpu_allow_invalid_fetch_constants=true`
+- Codegen 追加 9 个缺失函数
+- VdSwap ~28Hz，无 FATAL
+
+**❌ 未达成**：
+- 加载死锁：信号量 0xF800090C 永不释放，所有工作线程 WAIT
+- 移 hook 失败：移除后游戏卡在更早初始化，hook 是目前唯一推进方式
+- ReXApp 迁移失败：预构建 SDK 与自构建 DLL 版本不匹配
+- 音频：未排查
+- 键盘：基本可用（A 键能过亮度画面）但映射不全
+
+**🎯 长期方案**：模仿 reblue——`OnFinalizePaths` ImGui 选盘 + VFS 挂载 + 让游戏自然初始化
+**⚠️ 阻塞**：ReXApp 迁移编译链接失败，需要解决 SDK 版本匹配问题
 
 **⚠️ 工作纪律（每次必读）：**
 - **遇到不确定的问题 → 先查 refs/ 参考项目和 rexglue Wiki，再给方案**
@@ -99,29 +108,44 @@ SanRecomp.exe (kernel emulation + renderer + audio + input)
 - **SanRecompLib**: PPC recompiled game code as static library (551 files, 100% compile)
 - **SanRecomp**: Host runtime — kernel syscall translation, GPU command translation via plume, audio, HID, installer UI
 
-## Key Files / Directories
+## 📁 开发目录地图（只关注这 5 个）
 
-| Path | Purpose | Status |
-|------|---------|--------|
-| `SanRecompLib/ppc/` | 546 generated PPC→C++ files from XenonRecomp | ✅ Generated, compiled |
-| `SanRecompLib/config/GTA5.toml` | XenonRecomp config for GTA V | ⚠️ Uses GTA IV register addresses |
-| `SanRecomp/kernel/` | Xbox 360 kernel translation layer | ✅ All files enabled |
-| `SanRecomp/gpu/video.cpp` | D3D12/Vulkan renderer via plume (~7800 lines) | ⚠️ Enabled, pipeline #if 0'd on Intel |
-| `SanRecomp/hid/` | Input handling (SDL + XInput) | ✅ All files enabled |
-| `SanRecomp/ui/` | Installer wizard, ImGui UI, game window | ✅ All enabled except stubs |
-| `SanRecomp/link_stubs.cpp` | Stubs for unbuilt libraries (FFmpeg, SDL_mixer, networking, etc.) | ⚠️ Required for link |
-| `SanRecomp/api/` | RAGE engine reverse-engineered structures | ⚠️ Mixed GTA4/GTA5 namespaces |
-| `tools/XenonRecomp/` | PPC→C++ recompiler tool | ✅ Built |
-| `tools/XenosRecomp/` | Xenos shader→HLSL tool | ✅ Cloned, not yet run |
-| `tools/file_to_c.cpp` | BIN2C converter for resource embedding | ✅ Built |
-| `tools/bc_diff/bc_diff.h` | Resource declarations + BC diff types | ✅ Stub with all externs |
-| `thirdparty/plume/` | Cross-platform GPU abstraction (D3D12, Vulkan, Metal) | ✅ Built as static lib |
-| `thirdparty/SDL/` | SDL2 static lib | ✅ Built (release-2.30.9) |
-| `thirdparty/imgui/` | Dear ImGui | ✅ v1.90.9 (detached) |
-| `refs/` | 参考项目 (UnleashedRecomp, rexglue-sdk, etc.) | ✅ 已下载并研究 |
-| `refs/rexglue-sdk/rexglue-bin/` | rexglue-sdk v0.8.0 预编译工具 | ✅ Windows 版本可用 |
-| `refs/UnleashedRecomp/` | Sonic Unleashed 重编译参考（hedge-dev） | ✅ 完整工作项目 |
-| `refs/rexglue-sdk/` | rexglue-sdk 源码 | ✅ v0.8.0, C++23 |
+| 目录 | 用途 |
+|------|------|
+| **`test_rexglue/`** | 当前主开发目录——rexglue 版 GTA V 入口+构建 |
+| `test_rexglue/main.cpp` | 入口代码（手动 Runtime + hook） |
+| `test_rexglue/generated/disc2/` | disc2 重编译 PPC→C++ 代码（192 文件） |
+| `test_rexglue/out/easy/` | **构建输出**——exe + DLL |
+| **`refs/rexglue-sdk/`** | rexglue SDK 源码（v0.8.0, 我们修改过） |
+| `refs/rexglue-sdk/src/system/runtime.cpp` | VFS 设置（d:/game:分离, RPF 挂载） |
+| `refs/rexglue-sdk/src/kernel/xam/xam_*.cpp` | Content 枚举/ODD/XamSwapDisc |
+| `refs/rexglue-sdk/src/system/xam/content_manager.cpp` | ContentManager |
+| `refs/rexglue-sdk/out/build/vulkan/` | DLL 构建目录 |
+| `refs/rexglue-sdk/out/win-amd64/` | DLL 输出（`rexruntimerd.dll`） |
+| **`refs/reblue-main/`** | 🔵 Blue Dragon 重编译——**多盘 hook 方案** |
+| **`refs/ReOdyssey-main/`** | 🔵 Mario Odyssey——ReXApp 框架用法 |
+| **`refs/UnleashedRecomp-NX/`** | 🔵 Sonic (Switch)——**ISO mmap 挂载** |
+
+### 其他参考项目
+
+| 目录 | 说明 |
+|------|------|
+| `refs/skate3recomp/` | Skate 3——ISO 安装器、Content 管理 |
+| `refs/TDURE/` | Test Drive Unlimited——完整 rexglue 项目 |
+| `refs/TheOutFit/`、`refs/bo2-recompiled/`、`refs/libertyv-master/` | 其他 rexglue 重编译 |
+| `refs/UnleashedRecomp/` | Sonic Unleashed (PC)——XenonRecomp 架构 |
+| `refs/XenonRunner/`、`refs/Recompiled-Samples/` | GTA IV 原始重编译 |
+| `refs/CodeWalker-master/`、`refs/RPF7-master/` | RPF/RAGE 格式参考 |
+| `refs/rexglue-sdk-wiki/` | rexglue Wiki 文档 |
+
+### 旧目录（不再使用）
+
+| 目录 | 说明 |
+|------|------|
+| `SanRecomp/` | XenonRecomp 版运行时（已废弃） |
+| `SanRecompLib/` | XenonRecomp 版 PPC 代码（已废弃） |
+| `tools/XenonRecomp/` | 旧重编译器（rexglue 替代） |
+| `tools/rexglue-sdk-0.8.1.32-dev.gf22cd9d-win-amd64/` | 预构建 SDK（版本旧，有兼容问题） |
 
 ## Submodule Versions (Critical)
 
@@ -148,7 +172,7 @@ These were manually switched from defaults:
 
 - **Remote**: `origin` = `git@github.com:Je11yb0ne/SanRecomp.git` (fork of OZORDI/SanRecomp)
 - **Upstream**: `git@github.com:OZORDI/SanRecomp.git`
-- **Branch**: `feature/xenonrecomp-phase9` (active), `feature/rexglue-migration` (archived), `main` (old)
+- **Branch**: `feature/rexglue-source-build` (active), `main` (old)
 - **Backup tag**: `backup/pre-rexglue-migration` (clean XenonRecomp state)
 - **Backup naming**: `claude-code/github-backup-YYYYMMDD-HHMMSS`
 - **Push rule**: `git push origin <branch>` after each milestone. NEVER use `git add -A`. Use `git add .` from repo root.
