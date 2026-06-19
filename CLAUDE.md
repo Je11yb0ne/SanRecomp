@@ -271,6 +271,44 @@ REXGLUE="refs/rexglue-sdk/rexglue-bin/win-amd64/bin/rexglue.exe"
 "$REXGLUE" codegen gta5_config.toml -v --force  # --force 跳过未解析调用
 ```
 
+## Current State (2026-06-19)
+
+**分支**: `feature/rexglue-source-build`
+
+### 🎉 RPF7 设备 + 6 归档合并 → 真实资产加载 + 游戏呈现真实帧！
+
+| 里程碑 | 状态 |
+|--------|------|
+| RpfContainerDevice (RPF7 设备) | ✅ `refs/rexglue-sdk/src/filesystem/devices/rpf_container_device.{h,cpp}` |
+| 解码验证 (AES-256单次 + 分块LZX) | ✅ common.rpf branches.meta → 合法 XML（设备确切代码路径二次验证）|
+| VFS overlay (最长前缀+并集) | ✅ `virtual_file_system.cpp::ResolvePath` |
+| 6 归档合并 @ game:\xbox360\ | ✅ xbox360a/b + install\part0-3.rpf (1451 条目) |
+| 8GB 安装提取 | ✅ `stfs_extract` STFS→`D:\Games\Xenia\gta5\install\part{0-3}.rpf` |
+| 真实资产加载 | ✅ scaleform/levels/models/streamedpeds 等从合并归档解析 |
+| **游戏呈现真实帧** | ✅ **GPU PRESENT 1280x720 format=6，循环 3 swap texture（三缓冲）+ 输入轮询** |
+
+**关键架构**：
+1. **STFS 含 partN.rpf（RPF7 归档）**，不是 loose 树。`stfs_extract --list` 确认根 = `partN.rpf` + `partN.timestamp`。需提取 partN.rpf 再用 RpfContainerDevice 解析。
+2. **挂载链**：`game:\xbox360\<dir>` → game:→Partition1 → 符号链接 `\Device\Harddisk0\Partition1\xbox360\`（**必须尾分隔符**，否则吞 xbox360a.rpf）→ `\Device\RpfXbox360\`。设备合并 6 归档。`common:` → game root（游戏自挂 common.rpf）。`xbox360a/b.rpf` 文件本身经 host 解析（游戏自挂 packfile）。
+3. **资源 RSC7 重建**：资源条目服务为 `[16B RSC7头(magic/version/sysFlags/gfxFlags 大端)] + 压缩体`；非资源解压后服务；`#→x` 在 ResolvePath 回退。
+4. **AES**：bundled tiny-aes（AES256+ECB，public 符号重命名 `RpfAes_*` 防冲突）；**LZX**：bundled cabextract（分块）。密钥从 `<game_root>/(360)key.dat` 运行时读取（不入 git）。
+
+### 🔴 下一阶段：引擎推进到可见 logo/菜单（非文件问题）
+
+- 游戏**已过资产门槛**：真实资产加载，~13 个真实缺失文件（creaturemetadata/occlusion/scaleform_generic 等，盘+安装都没有）是**可选探测**（每个请求 1 次，游戏容忍）。
+- 游戏**存活 + 呈现真实帧**（GPU PRESENT 1280x720 三缓冲 + XamInputGetCapabilities 轮询）。
+- **需用户目视确认窗口**：游戏在呈现真实 swap texture，窗口应显示 logo/加载/菜单。若窗口仍黑但 GPU 在 PRESENT 真实纹理 → 查 plume swapchain 呈现链；若显示内容 → 目标达成。
+- **rexglue DLL 重建**（改 src 后）：
+  ```bash
+  export VSROOT="/c/Program Files/Microsoft Visual Studio/18/Community"
+  export PATH="$VSROOT/VC/Tools/Llvm/x64/bin:/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64:$VSROOT/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja:$VSROOT/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin:$PATH"
+  cd refs/rexglue-sdk/out/build/vulkan && ninja rexruntimerd.dll
+  cp refs/rexglue-sdk/out/win-amd64/rexruntimerd.dll test_rexglue/out/easy/
+  ```
+- **跑游戏**：`cd test_rexglue/out/easy && ./gta5_rexglue.exe`（窗口 GUI；日志 `gta5_kernel.log`）。
+
+---
+
 ## Current State (2026-06-18)
 
 **分支**: `feature/rexglue-source-build`
