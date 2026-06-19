@@ -117,6 +117,31 @@ D:\Games\Xenia\gta5\content\0000000000000000\545408A7\00000002\545408A70000000{0
 
 **下一步**：写 RpfContainerDevice（RPF7 解析已验证）→ 挂载 → 重跑确认 game:\xbox360\*.#td 解析成功 → 游戏加载真实资产。
 
+### 🟢🟢 RpfContainerDevice 已建成 + 工作！（2026-06-19 续）
+
+**完整实现 + 验证链：**
+1. **独立验证解码管线**（`test_rexglue/rpf_read.cpp` + 移植的 `rpf_lzx.c` + `rpf_aes.c`）：common.rpf 的 `data/action/branches.meta`（加密+压缩 1410B）→ AES-256 单次 + 分块 LZX → **54519B 合法 XML**（`<?xml...><CAct...`）。**用设备的确切代码路径（bundled tiny-aes AES-256 + 分块 LZX）二次验证**，输出一致。
+2. **设备实现**（`refs/rexglue-sdk/src/filesystem/devices/`）：
+   - `rpf_container_device.{h,cpp}`：多归档合并、`ParseToc`（单次 AES TOC）、`ReadNodeData`（非资源→解压；资源→重建 16B RSC7 头+压缩体）、`ResolvePath`（`#→x` 回退）、Entry 树（仿 StfsContainerDevice）。
+   - `rpf_aes.{c,h}`：bundled tiny-aes，配置 AES256+ECB，**public 符号重命名**（`RpfAes_*`）避免与运行时 AES-128 冲突 + extern "C" 守卫。
+   - `rpf_lzx.{c,h}`：bundled cabextract/balika011 LZX。
+   - CMake：3 文件加入 `src/filesystem/CMakeLists.txt`（已启用 C 语言）。
+3. **挂载**（`runtime.cpp::SetupVfs`）：检测 `<game_root>/xbox360{a,b}.rpf` + `(360)key.dat`（不入 git）→ `RpfContainerDevice` 挂到 `\Device\RpfXbox360` → 符号链接 `\Device\Harddisk0\Partition1\xbox360\`（**必须带尾分隔符**，否则 prefix-match 误吞 `xbox360a.rpf`）→ `\Device\RpfXbox360\`。common.rpf 由游戏自挂（`common:` → game root）。
+4. **DLL 重建成功**（无符号冲突，AES 重命名生效）+ 部署。
+
+**运行结果（重大进展）：**
+- ✅ 设备挂载：`RpfContainerDevice: mounted xbox360a.rpf (17) + xbox360b.rpf (56)`。
+- ✅ 符号链接修复后游戏**冲过归档打开**（fs 日志 3 行 → **2219 行**），打开 `game:\xbox360a.rpf`（host 真文件，游戏自挂 packfile）。
+- ✅ 游戏继续 **60Hz 渲染**（911 render 行），无崩溃。
+- ✅ VFS 解析链验证正确：`game:\xbox360\X` → game:→Partition1 → 尾分隔符符号链接 → RpfXbox360 设备。
+
+**🔴 新发现 = 下一阶段：game:\xbox360\ 需要「多归档合并」（不止 xbox360a/b）**
+- 游戏卡在请求 `game:\xbox360\{data\cdimages\scaleform_generic.rpf, anim\creaturemetadata.rpf, audio\occlusion.rpf, models\cdimages\streamedpeds_*.rpf, levels\...\cutspeds.rpf}` —— 这些**不在 xbox360a/b**（a 只有 scaleform_frontend/platform_360 + lang；b 只有 UI 纹理/模型/movies）。
+- 它们在 **8GB 安装（partN，原 STFS 545408A700000000-3）**。已提取的 part0-3 目录（7.7G/1297 文件）：levels 较全（cutspeds 找到），但 **缺 data/、audio/，且 creaturemetadata/scaleform_generic/streamedpeds 未提取到**（浅层提取）。
+- **完整 game:\xbox360\ = xbox360a + xbox360b + audio_rel + 4×partN 安装** 的合并。盘内 + 安装**互补**（盘内 textures=UI，安装 textures=script_txds 等内容 rpf）。
+
+**下一步选项**：(a) VFS overlay（改 ResolvePath 试所有匹配设备）+ 挂载 RpfContainerDevice(xbox360a/b) + 4×StfsContainerDevice(原 STFS 安装包，按需读取完整内容) 叠加在 game:\xbox360\；(b) 用 stfs_extract 把安装包完整提取（非浅层）；(c) 扩展 RpfContainerDevice 同时吃 STFS/loose 源。推荐 (a)——StfsContainerDevice 按需读取，绕过提取不完整问题，VFS overlay 是通用小改动。
+
 ---
 
 ## 已完成阶段

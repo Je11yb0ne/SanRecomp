@@ -1,6 +1,6 @@
 # GTA V RexGlue — WIN32 window app
 cmake_minimum_required(VERSION 3.25)
-project(gta5_rexglue LANGUAGES CXX)
+project(gta5_rexglue LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 23)
 
 set(RX "${CMAKE_SOURCE_DIR}/../tools/rexglue-sdk-0.8.1.32-dev.gf22cd9d-win-amd64")
@@ -37,7 +37,7 @@ target_link_libraries(stfs_extract
     msvcrt
 )
 
-# Standalone RPF7 (GTA V) TOC reader/validator — no rexglue deps, just BCrypt.
-add_executable(rpf_read rpf_read.cpp)
+# Standalone RPF7 (GTA V) reader / decode validator — exercises the EXACT device
+# decode path (bundled tiny-aes AES-256 + chunked LZX), no rexglue deps.
+add_executable(rpf_read rpf_read.cpp rpf_lzx.c rpf_aes.c)
 target_compile_options(rpf_read PRIVATE /W3 /EHsc /MD)
-target_link_libraries(rpf_read bcrypt)
