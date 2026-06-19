@@ -1,5 +1,5 @@
 // GTA V — rexglue Vulkan baseline + window
-#include "generated/default/gta5_recomp_init.h"
+#include "generated/disc2/gta5_recomp_init.h"
 #include <rex/runtime.h>
 #include <rex/graphics/vulkan/graphics_system.h>
 #include <rex/graphics/graphics_system.h>
@@ -126,62 +126,21 @@ REX_HOOK_RAW(sub_8239CBA8) {
     __imp__sub_8239CBA8(ctx, base);
 }
 
-// Hook GTA V's disc state machine — same approach as reblue's custom disc hooks.
-// sub_8299BD70(r3=state, r4=disc):
-//   state=1 → swap disc (we call XamSwapDisc via original code)
-//   state=2 → completion (the game wants to finalize)
-// Force return=1 so the caller always thinks the disc operation succeeded.
-// ALSO: block the internal trap path by not calling the original for state=2.
+// === DISC STATE MACHINE BYPASS (necessary until content setup is perfect) ===
+// The game's internal state machine requires proper installation flow which we
+// can't replicate with pre-populated content alone.  These hooks let the game
+// reach the loading screen; the remaining blocker is the loading deadlock.
+REX_HOOK_RAW(sub_82985760) { (void)base; ctx.r3.u64 = 0; }  // master switch
+REX_HOOK_RAW(sub_8299FBF8) {
+    if ((ctx.r4.u32 & 0xFF) == 1) { ctx.r3.u64 = 0; return; }
+    __imp__sub_8299FBF8(ctx, base);
+}
 REX_HOOK_RAW(sub_8299BD70) {
-    uint32_t state = ctx.r3.u32 & 0xFF;
-    static FILE* f = nullptr;
-    if (!f) { f = fopen("gta5_disc_state.txt", "w"); }
-    if (f) { fprintf(f, "sub_8299BD70(state=%u) lr=0x%08X\n", state, (uint32_t)ctx.lr); fflush(f); }
-
-    if (state == 2) {
-        // State 2 = "disc handling complete, proceed to game".
-        // The original function would try to finalize and may hit traps.
-        // Skip it entirely — just tell the caller everything is fine.
-        ctx.r3.u64 = 1;
-        return;
-    }
-
-    // State 1 = swap disc. Call original (which calls sub_8364D6C8 →
-    // XamSwapDisc), then override return value.
+    if ((ctx.r3.u32 & 0xFF) == 2) { ctx.r3.u64 = 1; return; }
     __imp__sub_8299BD70(ctx, base);
     ctx.r3.u64 = 1;
 }
-
-// Hook sub_8364D6C8 to skip the internal validation/trap and directly call
-// XamSwapDisc.  The original function validates some global state and may
-// hit a PPC trap if the state is inconsistent.
-REX_HOOK_RAW(sub_8364D6C8) {
-    uint32_t disc = ctx.r3.u32 & 0xFF;
-    (void)disc;
-    __imp__XamSwapDisc(ctx, base);
-}
-
-// === MASTER SWITCH: sub_82985760 ===
-// The caller checks: if (sub_82985760() == 0) → skip disc swap logic.
-// Always return 0 so the disc swap branch is never entered.
-REX_HOOK_RAW(sub_82985760) {
-    (void)base;
-    ctx.r3.u64 = 0;
-}
-
-// sub_8299FBF8 is called in two modes:
-//   Call 1 (r4=0): early boot initialization — let it run.
-//   Call 2 (r4=1): disc swap logic — skip entirely (return success).
-REX_HOOK_RAW(sub_8299FBF8) {
-    uint32_t r4 = ctx.r4.u32 & 0xFF;
-    if (r4 == 1) {
-        // Disc swap call — skip
-        ctx.r3.u64 = 0;
-        return;
-    }
-    // Initialization call — let original run
-    __imp__sub_8299FBF8(ctx, base);
-}
+REX_HOOK_RAW(sub_8364D6C8) { __imp__XamSwapDisc(ctx, base); }
 
 // === DIAGNOSTIC: XamContentCreateEx content_data probe ===
 // sub_8363A3B8 is the guest XamContentCreateEx wrapper; it throws
@@ -348,11 +307,15 @@ int main() {
     SetUnhandledExceptionFilter(CrashHandler);
 #endif
 
-    // 1. Create Runtime
+    // 0. Disc selection (reblue-style: let user pick disc paths before boot)
+    // Use known defaults if already configured.
     std::filesystem::path gameRoot = "D:/Games/Xenia/gta5";
     std::filesystem::path userRoot = "C:/Users/Jellybone/AppData/Roaming/SanRecomp/save";
+    fprintf(stderr, "[0/6] game_root=%s\n", gameRoot.string().c_str());
+
+    // 1. Create Runtime
     rex::Runtime runtime(gameRoot, userRoot);
-    fprintf(stderr, "[1/5] Runtime created\n");
+    fprintf(stderr, "[1/6] Runtime created\n");
 
     // 2. Create Win32 app context BEFORE Setup (so SetupPresentation works)
     HINSTANCE hInstance = GetModuleHandle(nullptr);
