@@ -126,17 +126,39 @@ REX_HOOK_RAW(sub_8239CBA8) {
     __imp__sub_8239CBA8(ctx, base);
 }
 
-// Log + force-success: sub_8299BD70 returns non-zero so caller marks disc inserted.
+// Hook GTA V's disc state machine — same approach as reblue's custom disc hooks.
+// sub_8299BD70(r3=state, r4=disc):
+//   state=1 → swap disc (we call XamSwapDisc via original code)
+//   state=2 → completion (the game wants to finalize)
+// Force return=1 so the caller always thinks the disc operation succeeded.
+// ALSO: block the internal trap path by not calling the original for state=2.
 REX_HOOK_RAW(sub_8299BD70) {
     uint32_t state = ctx.r3.u32 & 0xFF;
-    uint32_t disc  = ctx.r4.u32 & 0xFF;
     static FILE* f = nullptr;
     if (!f) { f = fopen("gta5_disc_state.txt", "w"); }
-    if (f) { fprintf(f, "sub_8299BD70(state=%u disc=%u) lr=0x%08X\n",
-               state, disc, (uint32_t)ctx.lr); fflush(f); }
+    if (f) { fprintf(f, "sub_8299BD70(state=%u) lr=0x%08X\n", state, (uint32_t)ctx.lr); fflush(f); }
+
+    if (state == 2) {
+        // State 2 = "disc handling complete, proceed to game".
+        // The original function would try to finalize and may hit traps.
+        // Skip it entirely — just tell the caller everything is fine.
+        ctx.r3.u64 = 1;
+        return;
+    }
+
+    // State 1 = swap disc. Call original (which calls sub_8364D6C8 →
+    // XamSwapDisc), then override return value.
     __imp__sub_8299BD70(ctx, base);
-    if (f) { fprintf(f, "  -> orig_r3=0x%llX FORCING 1\n", ctx.r3.u64); fflush(f); }
-    ctx.r3.u64 = 1;  // non-zero = disc inserted successfully
+    ctx.r3.u64 = 1;
+}
+
+// Hook sub_8364D6C8 to skip the internal validation/trap and directly call
+// XamSwapDisc.  The original function validates some global state and may
+// hit a PPC trap if the state is inconsistent.
+REX_HOOK_RAW(sub_8364D6C8) {
+    uint32_t disc = ctx.r3.u32 & 0xFF;
+    (void)disc;
+    __imp__XamSwapDisc(ctx, base);
 }
 
 // === DIAGNOSTIC: XamContentCreateEx content_data probe ===

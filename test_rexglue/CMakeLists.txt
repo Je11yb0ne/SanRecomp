@@ -6,10 +6,10 @@ set(CMAKE_CXX_STANDARD 23)
 set(RX "${CMAKE_SOURCE_DIR}/../tools/rexglue-sdk-0.8.1.32-dev.gf22cd9d-win-amd64")
 include_directories("${RX}/include")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/generated/disc2")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/generated/default")
 link_directories("${RX}/lib")
 
-file(GLOB REXGLUE_SRCS "generated/disc2/*.cpp")
+file(GLOB REXGLUE_SRCS "generated/default/*.cpp")
 
 add_executable(gta5_rexglue
     main.cpp polyfills.cpp ${REXGLUE_SRCS})
