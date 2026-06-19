@@ -6,13 +6,21 @@
 [project]
 name = "gta5_recomp"
 sdk_version = "0.8.0"
-game_root = "D:/Games/xenia_manager/Emulators/Xenia Canary/content/0000000000000000/545408A7/00007000/7AA7931FF6863459F017"
+game_root = "D:/Games/Xenia/gta5/disc2(play)"
 
 [entrypoint]
-file_path = "D:/Games/xenia_manager/Emulators/Xenia Canary/content/0000000000000000/545408A7/00007000/7AA7931FF6863459F017/default.xex"
+file_path = "D:/Games/Xenia/gta5/disc2(play)/default.xex"
 out_directory_path = "generated/disc2"
 includes = []
 
-# disc2 has its own code layout; missing indirect-call targets are discovered at
-# runtime via main.cpp's ResolveIndirectFunction collector (+ codegen --force).
+# Missing functions: disc2 shares disc1's code layout, so the same direct
+# tail-call targets (sitting after a bctr/blr terminator, which the analyzer
+# treats as unreachable -> REX_FATAL "Unresolved call") apply. Indirect-call
+# targets are still collected at runtime via main.cpp's ResolveIndirectFunction.
 [entrypoint.functions]
+0x8255DC48 = { end = "0x8255DC58" }
+0x8255DC88 = { end = "0x8255DCB8" }
+0x8256BCC8 = { end = "0x8256BCE0" }
+0x83366BD0 = { end = "0x83366BEC" }
+0x836E9A58 = { end = "0x836E9A80" }
+0x836E9A70 = { end = "0x836E9A80" }
