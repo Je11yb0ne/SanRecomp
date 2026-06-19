@@ -142,6 +142,31 @@ D:\Games\Xenia\gta5\content\0000000000000000\545408A7\00000002\545408A70000000{0
 
 **下一步选项**：(a) VFS overlay（改 ResolvePath 试所有匹配设备）+ 挂载 RpfContainerDevice(xbox360a/b) + 4×StfsContainerDevice(原 STFS 安装包，按需读取完整内容) 叠加在 game:\xbox360\；(b) 用 stfs_extract 把安装包完整提取（非浅层）；(c) 扩展 RpfContainerDevice 同时吃 STFS/loose 源。推荐 (a)——StfsContainerDevice 按需读取，绕过提取不完整问题，VFS overlay 是通用小改动。
 
+### 🟢🟢🟢 6 归档合并完成 — 真实资产加载！（2026-06-19 续）
+
+**关键发现：STFS 包内含 partN.rpf（RPF7 归档），不是 loose 树。**
+- `stfs_extract --list 545408A700000000` → `part0.rpf (2.0GB)` + `part0.timestamp`。即 STFS 根只有 partN.rpf 这个 RPF7 归档文件 + 时间戳。
+- 之前的 STFS overlay 给的是 partN.rpf 文件本身（不是其内容），所以 `\levels\...` 解析失败。
+- **正解**：把 partN.rpf RPF7 归档**提取出来**（`stfs_extract <pkg> D:\Games\Xenia\gta5\install\` → `install\part{0-3}.rpf`，~7.7GB），用 RpfContainerDevice 解析。
+
+**实现（已完成）：**
+1. **VFS overlay**（`virtual_file_system.cpp::ResolvePath`）：最长前缀匹配 + 同前缀设备**并集**（试每个直到解析成功）。保留 NullDevice 语义（更长前缀 Partition1 不被 \Device\Harddisk0 遮蔽）。通用小改动。
+2. **提取 partN.rpf**：4 个 STFS 包 → `install\part0-3.rpf`（2.0+2.0+2.0+1.7GB）。part0 验证：RPF7 676 条目，根 = `levels/gta5/_citye/...`（世界数据，直接映射 game:\xbox360\levels\）。
+3. **6 归档合并**（`runtime.cpp::SetupVfs`）：RpfContainerDevice 现挂载 **xbox360a + xbox360b + install\part0-3.rpf**（archive 列表合并），全部在 game:\xbox360\。移除 STFS overlay（改为直接挂 partN.rpf）。
+4. DLL 重建 + 部署。
+
+**运行结果（重大里程碑）：**
+- ✅ 6 归档全挂载：xbox360a(17) + xbox360b(56) + part0(676) + part1(342) + part2(212) + part3(148) = 1451 条目。
+- ✅ **entry-not-found：满屏 → 仅剩 ~13 个真实缺失文件**。之前缺的 streamedpeds_hc/ig 等现在解析成功（从 install）。
+- ✅ **游戏加载真实资产**：scaleform_platform_360/frontend.rpf、levels/models、streamedpeds 子集等都从合并归档解析。
+- ✅ **游戏存活 + 60Hz 渲染**（1070 VdSwap），fs 行 2219→2544，请求推进到新资产（icon.PNG、data/metadata/cameras）。
+- ✅ **剩余 ~13 缺失文件是「可选探测」**：每个只请求 1 次（不重试/不死循环），游戏容忍继续。盘内+安装都没有（creaturemetadata、occlusion、scaleform_generic/web/minigames/minimap、部分 streamedpeds、icon.PNG、cameras）——可能光盘 dump 不全 / DLC / 引擎可选。
+
+**🔴 当前状态 = 资产门槛已过，下一阶段是「引擎推进到 logo/菜单」**
+- 游戏不再卡资产（真实资产加载中，可选缺失被容忍，存活渲染）。
+- 但还没可见 logo（rockstar_logos.bik 在 xbox360b，设备有，游戏尚未请求）。游戏在资产枚举后 fs 转静（在做引擎 init / 等线程 / 处理已加载数据）。
+- **下一步**：诊断引擎为何在资产加载后未推进到 logo 播放（非文件问题；可能 GPU 命令翻译、线程同步、或需更多 init）。剩余 13 可选文件回报递减，先查引擎推进。
+
 ---
 
 ## 已完成阶段
