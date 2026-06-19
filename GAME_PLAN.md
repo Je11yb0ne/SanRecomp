@@ -73,6 +73,28 @@ D:\Games\Xenia\gta5\content\0000000000000000\545408A7\00000002\545408A70000000{0
 - 符号化崩溃：`llvm-symbolizer --obj=rexruntimerd.dll --relative-address 0xRVA`（PDB 在 refs/rexglue-sdk/out/win-amd64/）。
 - backtrace 里**巨大偏移**=其他模块（vcruntime 等），**小偏移(<0xF00000)**=rexruntimerd 真实帧。
 
+### 🎉🎉 突破：冲过脏盘错误 + 游戏渲染（2026-06-19 续）
+
+**修复链（脏盘→渲染）：**
+1. **utf8 容错**（已重建 DLL）：`to_utf16` replace_invalid。
+2. **按 root_name 挂载内容**（UnleashedRecomp 模式，已重建 DLL）：
+   - 新增 `ContentManager::OpenContentByRootName(root_name)`（content_manager.cpp）：挂载 `<userRoot>/0/545408A7/00000002/<root_name>/`。
+   - `xeXamContentCreate` OPEN_EXISTING 回退：按 file_name 找不到时（GTA V content_data 未初始化）→ 按 root_name 挂载。
+   - 内容目录重命名 `545408A70000000{0..3}` → `part0..part3`（匹配游戏 root 名）。
+3. **结果**：✅ 0 脏盘错误 ✅ 无崩溃 ✅ part0-3 内容挂载成功 ✅ **VdSwap 660+ 帧稳定渲染**。
+
+**🔴 当前阻塞：游戏资产文件缺失（最后一道数据门槛）**
+- 游戏把 content open 当**存在性检查**（开→立即关，不读 partN.rpf）。
+- 真实资产读取走 `game:\xbox360\...` / `game:\common\...`，全部 `entry not found`：
+  - 嵌套归档：`game:\xbox360\anim\creaturemetadata.rpf`、`scaleform_*.rpf`、`streamedpeds_*.rpf`...
+  - 资源：`game:\xbox360\textures\*.#td`、`models\*.#dd`
+- **结论**：GTA V 的"安装"= 把 4 个 partN.rpf 的**内容解包到 `game:\xbox360\` + `game:\common\`**（含嵌套 rpf + 资源）。游戏从不按名读 partN.rpf。
+
+**🔧 下一步：提供 game:\xbox360\ + game:\common\ 资产**
+- 需要 **RPF7 解包**（partN.rpf 是 RPF7 归档，AES TOC + 压缩），且**保留 RAGE 文件名**（游戏要 `.#td`，OpenIV 解包成 `.xtd` 不匹配）。
+- 候选源：(a) 解包 partN.rpf（正确文件名）；(b) 用户 OpenIV 解包的 gta5 extract（.xtd，需重命名 x→#）；(c) 写 RPF7 解包器。
+- 文件名 `#` vs `x` 约定是关键：游戏请求 `startup.#td`，rexglue VFS 字面匹配。
+
 ---
 
 ## 已完成阶段
