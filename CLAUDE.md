@@ -36,19 +36,18 @@ SanRecomp is a static recompilation project porting GTA V (Xbox 360) to PC. Fork
   - 自动生成函数导出、异常处理、模板脚手架
 - XenonRecomp 保留作为辅助工具
 
-**Current Phase: 12 — 安装检测门（已大幅推进，但仍未突破）**
-- ✅ DISC2（play，游戏本体）codegen + build + run 成功
-- ✅ Content 枚举/打开全部修复：`.header` 文件（Headers/00000002/*.header）、`common` 目录、ODD 枚举实现
-- ✅ `license_mask` CVAR = 1, `XamContentIsGameInstalledToHDD` → REX_EXPORT_STUB_RETURN(0)
-- ✅ Hook `sub_8364D6C8`（XamSwapDisc 包装器）+ `sub_8299BD70`（光盘状态机）→ 绕过换盘检测
-- ✅ `XamSwapDisc` 返回 SUCCESS，不再无限重试；0 trap hits
-- 🔴 **窗口仍显示「插入 disc1」** — 主线程等待 sem `0xF8000A94`，偶尔醒来渲染（14-28 VdSwap/30-45s）
-- 🔴 根因可能不在 content/API 层 —— 游戏 logic 在更高层决定渲染"插入 disc1"UI 状态
-- 🔧 exe 位置：`test_rexglue/out/easy/gta5_rexglue.exe`（disc2，generated/disc2）
-- 🔧 game_data_root：`D:/Games/Xenia/gta5`（含 RPF 资产 + install\part0-3.rpf）
-- 分支：`feature/rexglue-source-build`
+**Current Phase: 13 — 加载故事模式死锁**
+- ✅ Phase 12 完成：突破"插入 disc1"→亮度调节→加载动画
+  - Hook `sub_82985760`=0（主开关）+ `sub_8299FBF8`(r4=1跳过) → 0次 XamSwapDisc
+  - 8 RPF 归档 3610 条目，entry-not-found 从 2002→~100
+  - GPU `gpu_allow_invalid_fetch_constants=true`（消除纹理校验警告）
+- 🔴 加载故事模式无限转圈：主线程数据处理循环，所有工作线程 WAIT
+- 🔧 Codegen 已追加 9 个缺失函数（825794B0, 82D66F40, 82DA62D8, 83426078, 83654870 等）
+- 🔧 exe：`test_rexglue/out/easy/gta5_rexglue.exe`（disc2, generated/disc2）
+- 🔧 VdSwap ~28Hz（改善），无 FATAL/崩溃
 
 **⚠️ 工作纪律（每次必读）：**
+- **遇到不确定的问题 → 先查 refs/ 参考项目和 rexglue Wiki，再给方案**
 - **绝不主动停下来** — 除非遇到需要用户决策的硬阻塞
 - **每阶段结束必须更新 CLAUDE.md + GAME_PLAN.md**
 - **每次会话开始必须读取 CLAUDE.md + GAME_PLAN.md**
@@ -412,8 +411,35 @@ export PATH="$LLVM:$SDK_BIN:$NINJA_DIR:$CMAKE_DIR:$PATH"
 cd test_rexglue/out/easy && cmake --build . -j 1
 ```
 
-### 下一步
+### 🔮 长期方案：reblue 式多盘支持（下一步由此开始）
 
-1. **诊断黑屏** — 游戏是否调用 VdSwap？GPU 命令缓冲是否有内容？
-2. **参考 TDURE 完整工作项目** — 对比渲染管线差异
-3. **添加 VdSwap 追踪** — 确认游戏渲染循环是否活跃
+**参考**：`refs/reblue-main/`（Blue Dragon, 3盘）、`refs/ReOdyssey-main/`（多盘）
+
+**reblue 做法**：
+1. 启动 exe → **游戏不运行**，先弹自定义 UI 选 ISO
+2. 用户选好 disc1、disc2 路径
+3. 把两盘内容挂载到 VFS
+4. **然后**才启动游戏——一切就位，游戏不走换盘流程
+
+**GTA V 对应实现**：
+- 用 ReXApp 框架的 `OnFinalizePaths` 钩子——在 `ConstructRuntime` 之前拦截
+- 写一个 ImGui 对话框让用户选 disc1(install) 和 disc2(play) 的目录
+- 选好后 mount 到 VFS，把 disc1 内容装到 HDD（`00000002/`），disc2 设为当前光盘
+- 然后 `ConstructRuntime` → `LaunchModule`
+- **完全移除**当前绕过游戏状态机的 hook（`sub_82985760`、`sub_8299FBF8`、`sub_8299BD70`、`sub_8364D6C8`）——让游戏自然运行
+
+**当前临时 hook（等长期方案实现后移除）**：
+| Hook | 作用 |
+|------|------|
+| `sub_82985760` → 0 | 主开关——告诉游戏"不需要换盘" |
+| `sub_8299FBF8`(r4=1) → 0 | 跳过换盘分支 |
+| `sub_8299BD70` | state=1/2 处理 |
+| `sub_8364D6C8` | 直接调 XamSwapDisc |
+| `sub_82215E98` | 加载循环追踪（临时） |
+
+### ⚠️ 问题解决流程（新增纪律）
+
+遇到不确定的问题时按此顺序：
+1. **先查 refs/** — 看已有项目怎么做（reblue, ReOdyssey, skate3, TDURE）
+2. **再查 rexglue Wiki** — https://github.com/rexglue/rexglue-sdk/wiki
+3. **最后才动手改代码** — 给出方案后再执行
