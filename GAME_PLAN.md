@@ -4,7 +4,7 @@
 
 **Rule:** Never stop. Update after each phase. Just work.
 
-**Current Phase: 12 — 安装检测门（content_data 垃圾 → 「插入 disc1」）** ⚡ NEXT
+**Current Phase: 13 — 加载死锁 + 长期方案规划** ⚡ NEXT
 
 ---
 
@@ -243,6 +243,70 @@ xeXamContentCreate root='part0' size=308 ctype=E9010000 flags=3 exists=false
    - 正确加载 XEX 到 IDA（需要 XEX loader 插件）
    - 搜索 RPF 归档中"insert disc"UI 资源名称，反向追踪触发条件
    - 考虑"插入 disc1"可能就是加载画面，需更多时间/特定配置文件触发过渡
+
+---
+
+---
+
+## Phase 13 — 加载死锁 + reblue 研究（2026-06-19 续）
+
+### 🔍 reblue 多盘实现原理（深入代码分析）
+
+**refs/reblue-main/** — Blue Dragon (3盘) rexglue 重编译项目。
+
+**核心文件**：
+- `src/bdengine/platform/file_dialogue.cpp` — Windows `IFileOpenDialog` 封装，弹出系统文件选择对话框
+- `config/functions.toml` — 光盘相关函数命名（非 hook 实现）
+
+**关键函数列表**（地址范围 0x826BCEC8-0x826BD5F8）：
+| 函数 | 地址 | 大小 | 作用 |
+|------|------|------|------|
+| `rex_ValidateDiscNumber` | 0x826BCEC8 | 0x78 | 验证光盘号 |
+| `rex_ExtractDiscContentSignature` | 0x826BCF40 | 0x74 | 提取内容签名 |
+| `rex_SignalDiscSwapInProgress` | 0x826BCFB8 | 0x10C | 标记换盘进行中 |
+| `rex_ClearDiscSwapInProgress` | 0x826BD110 | 0xA0 | 清除换盘标记 |
+| `rex_WaitForDiscSwapUI` | 0x826BD438 | 0x94 | 等待 UI 完成 |
+| `rex_BeginDiscSwap` | 0x826BD5F8 | 0x78 | 开始换盘 |
+| `rex_j_XamShowDeviceSelectorUI` | 0x8248D710 | 0x4 | **弹出设备选择 UI** |
+| `bdDirtyDiscFatal` | 0x8248D740 | 0x1C | 脏盘错误 stub |
+
+**reblue 换盘流程（推测）**：
+1. 游戏需要换盘 → `rex_BeginDiscSwap`
+2. `rex_SignalDiscSwapInProgress` → 标记开始
+3. `rex_j_XamShowDeviceSelectorUI` → 弹出文件对话框（`OpenFileDialogue`）
+4. 用户选 ISO → `rex_ValidateDiscNumber` → `rex_ExtractDiscContentSignature`
+5. `rex_WaitForDiscSwapUI` → 等挂载完成
+6. `rex_ClearDiscSwapInProgress` → 清除标记
+7. 游戏继续
+
+**reblue 如何知道先读哪个盘**：
+- Blue Dragon **游戏自己**决定调用哪个盘——游戏的换盘状态机知道当前需要 disc 1/2/3
+- reblue 只是**替换**换盘函数的实现（文件对话框替代系统弹窗），不改变游戏逻辑
+- **GTA V 同理**：游戏自己知道需要 disc1（安装）还是 disc2（游玩），我们不需要告诉它
+
+### 🎯 对 GTA V 的启示
+
+**我们当前 hook 的问题**：
+- `sub_82985760 → 0`：直接返回"不需要换盘"，跳过了游戏的整个初始化和验证流程
+- 这类似于 reblue 把 `rex_BeginDiscSwap` 等全部 stub 掉——游戏的状态机无法正确初始化
+
+**正确做法（模仿 reblue）**：
+- 不是返回固定值，而是**实现换盘流程**
+- 当游戏调换盘函数时：弹出 UI 让用户选 disc 目录 → 挂载 VFS → 返回成功
+- 这样游戏的状态机走完整流程，内部标记正确设置
+
+### ⚡ 当前状态（2026-06-19 最新）
+
+- ✅ "插入 disc1"→亮度→加载动画（hook `sub_82985760`=0 绕过换盘）
+- ✅ 8 RPF 归档 3610 条目，`gpu_allow_invalid_fetch_constants=true`
+- ✅ 9 个缺失函数已 codegen
+- 🔴 加载故事模式无限转圈，所有工作线程 WAIT
+
+### 📋 下一步
+
+1. **实现 reblue 式换盘 UI**：`OnFinalizePaths` 弹出文件选择 → 挂载 disc1/disc2 → 启动游戏
+2. **移除临时 hook**：让游戏走完整初始化流程
+3. **排查加载死锁**：当 hook 移除后，观察游戏是否能自然完成加载
 
 ---
 
